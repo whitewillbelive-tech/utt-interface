@@ -1,0 +1,179 @@
+{
+  "fixture_marker": "SYNTHETIC_ONLY",
+  "history": [
+    {
+      "id": "synthetic-event-001",
+      "record_id": "synthetic-record-006",
+      "supersedes": null,
+      "type": "hold"
+    },
+    {
+      "id": "synthetic-event-002",
+      "record_id": "synthetic-record-006",
+      "supersedes": "synthetic-event-001",
+      "type": "cancel"
+    }
+  ],
+  "location": {
+    "boundary": "half_open",
+    "end": 12,
+    "source_id": "synthetic-source-one",
+    "source_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb",
+    "start": 7,
+    "text": "🧭 동쪽",
+    "unit": "utf16_code_units"
+  },
+  "project_links": [
+    {
+      "project_id": "synthetic-project-cloud",
+      "record_id": "synthetic-record-001",
+      "status": "confirmed"
+    },
+    {
+      "project_id": "synthetic-project-cloud",
+      "record_id": "synthetic-record-002",
+      "status": "observed"
+    },
+    {
+      "project_id": "synthetic-project-clock",
+      "record_id": "synthetic-record-002",
+      "status": "unconfirmed"
+    },
+    {
+      "project_id": "synthetic-project-clock",
+      "record_id": "synthetic-record-004",
+      "status": "observed"
+    },
+    {
+      "project_id": "synthetic-project-cloud",
+      "record_id": "synthetic-record-005",
+      "status": "conflict"
+    },
+    {
+      "project_id": "synthetic-project-clock",
+      "record_id": "synthetic-record-006",
+      "status": "observed"
+    },
+    {
+      "project_id": "synthetic-project-clock",
+      "record_id": "synthetic-record-007",
+      "status": "observed"
+    }
+  ],
+  "projects": [
+    {
+      "id": "synthetic-project-cloud",
+      "name": "구름 정원"
+    },
+    {
+      "id": "synthetic-project-clock",
+      "name": "모래 시계"
+    }
+  ],
+  "records": [
+    {
+      "canon_state": "not_approved",
+      "id": "synthetic-record-001",
+      "observed_state": "observed",
+      "proposal_state": "none",
+      "review_state": "unreviewed",
+      "source_id": "synthetic-source-one",
+      "title": "가상 관측"
+    },
+    {
+      "canon_state": "not_approved",
+      "id": "synthetic-record-002",
+      "observed_state": "observed",
+      "proposal_state": "draft",
+      "review_state": "held",
+      "source_id": "synthetic-source-one",
+      "title": "가상 교차 관계"
+    },
+    {
+      "canon_state": "unknown",
+      "id": "synthetic-record-003",
+      "observed_state": "observed",
+      "proposal_state": "none",
+      "review_state": "unreviewed",
+      "source_id": null,
+      "title": "가상 미분류"
+    },
+    {
+      "canon_state": "not_approved",
+      "id": "synthetic-record-004",
+      "observed_state": "observed",
+      "proposal_state": "none",
+      "review_state": "evidence_requested",
+      "source_id": "synthetic-source-missing",
+      "title": "가상 출처 누락"
+    },
+    {
+      "canon_state": "not_approved",
+      "id": "synthetic-record-005",
+      "observed_state": "conflicting",
+      "proposal_state": "conflict",
+      "review_state": "held",
+      "source_id": "synthetic-source-one",
+      "title": "가상 충돌 보류"
+    },
+    {
+      "canon_state": "not_approved",
+      "id": "synthetic-record-006",
+      "observed_state": "observed",
+      "proposal_state": "none",
+      "review_state": "cancelled",
+      "source_id": "synthetic-source-one",
+      "title": "가상 이력"
+    },
+    {
+      "canon_state": "unknown",
+      "id": "synthetic-record-007",
+      "observed_state": "observed",
+      "proposal_state": "none",
+      "review_state": "unreviewed",
+      "source_id": "synthetic-source-one",
+      "summary": "",
+      "title": "가상 빈 설명"
+    }
+  ],
+  "scenarios": [
+    {
+      "expected_total": 0,
+      "id": "empty_search",
+      "kind": "success"
+    },
+    {
+      "expected_code": "SOURCE_MISSING",
+      "id": "source_missing",
+      "kind": "error"
+    },
+    {
+      "expected_code": "CONNECTION_UNAVAILABLE",
+      "id": "connection_failure",
+      "kind": "error"
+    },
+    {
+      "expected_code": "UNSUPPORTED_CONTRACT",
+      "id": "unsupported_contract",
+      "kind": "error"
+    },
+    {
+      "expected_code": "VERSION_MISMATCH",
+      "id": "snapshot_changed",
+      "kind": "error"
+    }
+  ],
+  "snapshot": "synthetic-snapshot-001",
+  "sources": [
+    {
+      "id": "synthetic-source-one",
+      "text": "가상의 자료 🧭 동쪽 지점은 시험을 위해 만든 표식입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. ",
+      "version_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb"
+    },
+    {
+      "id": "synthetic-source-missing",
+      "missing": true,
+      "text": null
+    }
+  ]
+}

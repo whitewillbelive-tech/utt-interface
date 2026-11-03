@@ -1,0 +1,798 @@
+{
+  "capabilities": {
+    "contract_version": "UTT-ACCESS-READ/0.1.0",
+    "error": null,
+    "operation": "capabilities",
+    "result": {
+      "dataset": {
+        "dataset_id": "synthetic-dataset-001",
+        "dataset_kind": "SYNTHETIC",
+        "legacy_contracts": [],
+        "snapshot_id": "synthetic-snapshot-001",
+        "source_version": "synthetic-v1"
+      },
+      "max_page_size": 100,
+      "operations": [
+        "capabilities",
+        "projects",
+        "search",
+        "detail",
+        "related_history"
+      ],
+      "sort_order": [
+        "dataset_id:asc",
+        "record_id:asc"
+      ],
+      "writes_supported": false
+    },
+    "snapshot": {
+      "dataset_id": "synthetic-dataset-001",
+      "dataset_kind": "SYNTHETIC",
+      "legacy_contracts": [],
+      "snapshot_id": "synthetic-snapshot-001",
+      "source_version": "synthetic-v1"
+    },
+    "status": "OK"
+  },
+  "connection_failure": {
+    "contract_version": "UTT-ACCESS-READ/0.1.0",
+    "error": {
+      "code": "CONNECTION_UNAVAILABLE",
+      "message": "합성 오류 예시",
+      "retryable": true
+    },
+    "operation": "search",
+    "result": null,
+    "snapshot": null,
+    "status": "ERROR"
+  },
+  "detail": {
+    "contract_version": "UTT-ACCESS-READ/0.1.0",
+    "error": null,
+    "operation": "detail",
+    "result": {
+      "record": {
+        "content_availability": "AVAILABLE",
+        "dataset_id": "synthetic-dataset-001",
+        "display_summary": null,
+        "document_role": "SYNTHETIC_NOTE",
+        "original_ids": [],
+        "project_relations": [
+          {
+            "assertion_status": "USER_CONFIRMED",
+            "evidence_ids": [],
+            "from_dataset_id": "synthetic-dataset-001",
+            "from_id": "synthetic-record-001",
+            "relation_id": "synthetic-relation-001",
+            "relation_kind": "BELONGS_TO",
+            "scope": "PROJECT",
+            "to_dataset_id": "synthetic-dataset-001",
+            "to_id": "synthetic-project-cloud"
+          }
+        ],
+        "project_relations_status": "AVAILABLE",
+        "raw_text": "가상의 자료 🧭 동쪽 지점은 시험을 위해 만든 표식입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. ",
+        "raw_text_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb",
+        "record_id": "synthetic-record-001",
+        "source_refs": [
+          {
+            "availability": "AVAILABLE",
+            "content_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb",
+            "dataset_id": "synthetic-dataset-001",
+            "location": {
+              "boundary": "half_open",
+              "end": 12,
+              "fragment_sha256": "8c3af378197ccc1281f46c731397551020155a273c58d6bd9f089d38725480db",
+              "start": 7,
+              "target": "SYNTHETIC_SOURCE",
+              "target_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb",
+              "unit": "UTF-16",
+              "verification": "VERIFIED"
+            },
+            "source_id": "synthetic-source-one",
+            "verification": "VERIFIED",
+            "version": "synthetic-source-v1"
+          }
+        ],
+        "source_status": "AVAILABLE",
+        "state": {
+          "adoption": "NOT_APPROVED",
+          "observation": "OBSERVED",
+          "proposal": "NONE",
+          "review": "UNREVIEWED"
+        },
+        "title": "가상 관측"
+      },
+      "related_projects": [
+        {
+          "aliases": [],
+          "classification_observed": null,
+          "dataset_id": "synthetic-dataset-001",
+          "former_names": [],
+          "membership_user_confirmed": null,
+          "name": "구름 정원",
+          "project_id": "synthetic-project-cloud",
+          "state": {
+            "adoption": "NOT_APPROVED",
+            "observation": "OBSERVED",
+            "proposal": "NONE",
+            "review": "UNREVIEWED"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "availability": "AVAILABLE",
+          "content_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb",
+          "dataset_id": "synthetic-dataset-001",
+          "location": {
+            "boundary": "half_open",
+            "end": 12,
+            "fragment_sha256": "8c3af378197ccc1281f46c731397551020155a273c58d6bd9f089d38725480db",
+            "start": 7,
+            "target": "SYNTHETIC_SOURCE",
+            "target_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb",
+            "unit": "UTF-16",
+            "verification": "VERIFIED"
+          },
+          "source_id": "synthetic-source-one",
+          "verification": "VERIFIED",
+          "version": "synthetic-source-v1"
+        }
+      ]
+    },
+    "snapshot": {
+      "dataset_id": "synthetic-dataset-001",
+      "dataset_kind": "SYNTHETIC",
+      "legacy_contracts": [],
+      "snapshot_id": "synthetic-snapshot-001",
+      "source_version": "synthetic-v1"
+    },
+    "status": "OK"
+  },
+  "history": {
+    "contract_version": "UTT-ACCESS-READ/0.1.0",
+    "error": null,
+    "operation": "related_history",
+    "result": {
+      "events": [
+        {
+          "dataset_id": "synthetic-dataset-001",
+          "decision": null,
+          "event_contract": "SYNTHETIC-DECISION/1",
+          "event_id": "synthetic-event-001",
+          "event_kind": "HOLD",
+          "event_payload_preservation": "UNTOUCHED",
+          "provenance_diagnostic": null,
+          "record_id": "synthetic-record-006",
+          "supersedes": null
+        },
+        {
+          "dataset_id": "synthetic-dataset-001",
+          "decision": null,
+          "event_contract": "SYNTHETIC-DECISION/1",
+          "event_id": "synthetic-event-002",
+          "event_kind": "CANCEL",
+          "event_payload_preservation": "UNTOUCHED",
+          "provenance_diagnostic": null,
+          "record_id": "synthetic-record-006",
+          "supersedes": "synthetic-event-001"
+        }
+      ],
+      "history_status": "AVAILABLE",
+      "page": {
+        "next_cursor": null,
+        "page_size": 3,
+        "sort": [
+          "item_kind:asc",
+          "dataset_id:asc",
+          "item_id:asc"
+        ]
+      },
+      "related_records": [
+        {
+          "content_availability": "UNKNOWN",
+          "dataset_id": "synthetic-dataset-001",
+          "display_summary": null,
+          "document_role": "SYNTHETIC_NOTE",
+          "original_ids": [],
+          "project_relations": [
+            {
+              "assertion_status": "OBSERVED",
+              "evidence_ids": [],
+              "from_dataset_id": "synthetic-dataset-001",
+              "from_id": "synthetic-record-006",
+              "relation_id": "synthetic-relation-006",
+              "relation_kind": "BELONGS_TO",
+              "scope": "PROJECT",
+              "to_dataset_id": "synthetic-dataset-001",
+              "to_id": "synthetic-project-clock"
+            }
+          ],
+          "project_relations_status": "AVAILABLE",
+          "raw_text": null,
+          "raw_text_sha256": null,
+          "record_id": "synthetic-record-006",
+          "source_refs": [
+            {
+              "availability": "AVAILABLE",
+              "content_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb",
+              "dataset_id": "synthetic-dataset-001",
+              "location": {
+                "boundary": "half_open",
+                "end": 12,
+                "fragment_sha256": "8c3af378197ccc1281f46c731397551020155a273c58d6bd9f089d38725480db",
+                "start": 7,
+                "target": "SYNTHETIC_SOURCE",
+                "target_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb",
+                "unit": "UTF-16",
+                "verification": "VERIFIED"
+              },
+              "source_id": "synthetic-source-one",
+              "verification": "VERIFIED",
+              "version": "synthetic-source-v1"
+            }
+          ],
+          "source_status": "AVAILABLE",
+          "state": {
+            "adoption": "NOT_APPROVED",
+            "observation": "OBSERVED",
+            "proposal": "NONE",
+            "review": "CANCELLED"
+          },
+          "title": "가상 이력"
+        }
+      ],
+      "relations": []
+    },
+    "snapshot": {
+      "dataset_id": "synthetic-dataset-001",
+      "dataset_kind": "SYNTHETIC",
+      "legacy_contracts": [],
+      "snapshot_id": "synthetic-snapshot-001",
+      "source_version": "synthetic-v1"
+    },
+    "status": "OK"
+  },
+  "projects": {
+    "contract_version": "UTT-ACCESS-READ/0.1.0",
+    "error": null,
+    "operation": "projects",
+    "result": {
+      "components": [],
+      "page": {
+        "next_cursor": null,
+        "page_size": 3,
+        "sort": [
+          "item_kind:asc",
+          "dataset_id:asc",
+          "item_id:asc"
+        ]
+      },
+      "projects": [
+        {
+          "aliases": [],
+          "classification_observed": null,
+          "dataset_id": "synthetic-dataset-001",
+          "former_names": [],
+          "membership_user_confirmed": null,
+          "name": "구름 정원",
+          "project_id": "synthetic-project-cloud",
+          "state": {
+            "adoption": "NOT_APPROVED",
+            "observation": "OBSERVED",
+            "proposal": "NONE",
+            "review": "UNREVIEWED"
+          }
+        },
+        {
+          "aliases": [],
+          "classification_observed": null,
+          "dataset_id": "synthetic-dataset-001",
+          "former_names": [],
+          "membership_user_confirmed": null,
+          "name": "모래 시계",
+          "project_id": "synthetic-project-clock",
+          "state": {
+            "adoption": "NOT_APPROVED",
+            "observation": "OBSERVED",
+            "proposal": "NONE",
+            "review": "UNREVIEWED"
+          }
+        }
+      ],
+      "relations": []
+    },
+    "snapshot": {
+      "dataset_id": "synthetic-dataset-001",
+      "dataset_kind": "SYNTHETIC",
+      "legacy_contracts": [],
+      "snapshot_id": "synthetic-snapshot-001",
+      "source_version": "synthetic-v1"
+    },
+    "status": "OK"
+  },
+  "request_search": {
+    "contract_version": "UTT-ACCESS-READ/0.1.0",
+    "cursor": null,
+    "dataset_id": "synthetic-dataset-001",
+    "document_role": null,
+    "operation": "search",
+    "page_size": 3,
+    "project_id": null,
+    "query": "가상",
+    "record_id": null,
+    "review_status": null,
+    "snapshot_id": "synthetic-snapshot-001"
+  },
+  "search_empty": {
+    "contract_version": "UTT-ACCESS-READ/0.1.0",
+    "error": null,
+    "operation": "search",
+    "result": {
+      "page": {
+        "next_cursor": null,
+        "page_size": 3,
+        "sort": [
+          "dataset_id:asc",
+          "record_id:asc"
+        ]
+      },
+      "records": []
+    },
+    "snapshot": {
+      "dataset_id": "synthetic-dataset-001",
+      "dataset_kind": "SYNTHETIC",
+      "legacy_contracts": [],
+      "snapshot_id": "synthetic-snapshot-001",
+      "source_version": "synthetic-v1"
+    },
+    "status": "OK"
+  },
+  "search_page_1": {
+    "contract_version": "UTT-ACCESS-READ/0.1.0",
+    "error": null,
+    "operation": "search",
+    "result": {
+      "page": {
+        "next_cursor": "synthetic-cursor-1",
+        "page_size": 3,
+        "sort": [
+          "dataset_id:asc",
+          "record_id:asc"
+        ]
+      },
+      "records": [
+        {
+          "content_availability": "AVAILABLE",
+          "dataset_id": "synthetic-dataset-001",
+          "display_summary": null,
+          "document_role": "SYNTHETIC_NOTE",
+          "original_ids": [],
+          "project_relations": [
+            {
+              "assertion_status": "USER_CONFIRMED",
+              "evidence_ids": [],
+              "from_dataset_id": "synthetic-dataset-001",
+              "from_id": "synthetic-record-001",
+              "relation_id": "synthetic-relation-001",
+              "relation_kind": "BELONGS_TO",
+              "scope": "PROJECT",
+              "to_dataset_id": "synthetic-dataset-001",
+              "to_id": "synthetic-project-cloud"
+            }
+          ],
+          "project_relations_status": "AVAILABLE",
+          "raw_text": "가상의 자료 🧭 동쪽 지점은 시험을 위해 만든 표식입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. 여기는 실제 대화나 문서를 사용하지 않고 작성한 긴 한국어 문장입니다. ",
+          "raw_text_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb",
+          "record_id": "synthetic-record-001",
+          "source_refs": [
+            {
+              "availability": "AVAILABLE",
+              "content_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb",
+              "dataset_id": "synthetic-dataset-001",
+              "location": {
+                "boundary": "half_open",
+                "end": 12,
+                "fragment_sha256": "8c3af378197ccc1281f46c731397551020155a273c58d6bd9f089d38725480db",
+                "start": 7,
+                "target": "SYNTHETIC_SOURCE",
+                "target_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb",
+                "unit": "UTF-16",
+                "verification": "VERIFIED"
+              },
+              "source_id": "synthetic-source-one",
+              "verification": "VERIFIED",
+              "version": "synthetic-source-v1"
+            }
+          ],
+          "source_status": "AVAILABLE",
+          "state": {
+            "adoption": "NOT_APPROVED",
+            "observation": "OBSERVED",
+            "proposal": "NONE",
+            "review": "UNREVIEWED"
+          },
+          "title": "가상 관측"
+        },
+        {
+          "content_availability": "UNKNOWN",
+          "dataset_id": "synthetic-dataset-001",
+          "display_summary": null,
+          "document_role": "SYNTHETIC_NOTE",
+          "original_ids": [],
+          "project_relations": [
+            {
+              "assertion_status": "OBSERVED",
+              "evidence_ids": [],
+              "from_dataset_id": "synthetic-dataset-001",
+              "from_id": "synthetic-record-002",
+              "relation_id": "synthetic-relation-002",
+              "relation_kind": "BELONGS_TO",
+              "scope": "PROJECT",
+              "to_dataset_id": "synthetic-dataset-001",
+              "to_id": "synthetic-project-cloud"
+            },
+            {
+              "assertion_status": "UNRESOLVED",
+              "evidence_ids": [],
+              "from_dataset_id": "synthetic-dataset-001",
+              "from_id": "synthetic-record-002",
+              "relation_id": "synthetic-relation-003",
+              "relation_kind": "BELONGS_TO",
+              "scope": "PROJECT",
+              "to_dataset_id": "synthetic-dataset-001",
+              "to_id": "synthetic-project-clock"
+            }
+          ],
+          "project_relations_status": "AVAILABLE",
+          "raw_text": null,
+          "raw_text_sha256": null,
+          "record_id": "synthetic-record-002",
+          "source_refs": [
+            {
+              "availability": "AVAILABLE",
+              "content_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb",
+              "dataset_id": "synthetic-dataset-001",
+              "location": {
+                "boundary": "half_open",
+                "end": 12,
+                "fragment_sha256": "8c3af378197ccc1281f46c731397551020155a273c58d6bd9f089d38725480db",
+                "start": 7,
+                "target": "SYNTHETIC_SOURCE",
+                "target_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb",
+                "unit": "UTF-16",
+                "verification": "VERIFIED"
+              },
+              "source_id": "synthetic-source-one",
+              "verification": "VERIFIED",
+              "version": "synthetic-source-v1"
+            }
+          ],
+          "source_status": "AVAILABLE",
+          "state": {
+            "adoption": "NOT_APPROVED",
+            "observation": "OBSERVED",
+            "proposal": "DRAFT",
+            "review": "HELD"
+          },
+          "title": "가상 교차 관계"
+        },
+        {
+          "content_availability": "UNKNOWN",
+          "dataset_id": "synthetic-dataset-001",
+          "display_summary": null,
+          "document_role": "SYNTHETIC_NOTE",
+          "original_ids": [],
+          "project_relations": [],
+          "project_relations_status": "AVAILABLE",
+          "raw_text": null,
+          "raw_text_sha256": null,
+          "record_id": "synthetic-record-003",
+          "source_refs": [],
+          "source_status": "UNKNOWN",
+          "state": {
+            "adoption": "UNKNOWN",
+            "observation": "OBSERVED",
+            "proposal": "NONE",
+            "review": "UNREVIEWED"
+          },
+          "title": "가상 미분류"
+        }
+      ]
+    },
+    "snapshot": {
+      "dataset_id": "synthetic-dataset-001",
+      "dataset_kind": "SYNTHETIC",
+      "legacy_contracts": [],
+      "snapshot_id": "synthetic-snapshot-001",
+      "source_version": "synthetic-v1"
+    },
+    "status": "OK"
+  },
+  "search_page_2": {
+    "contract_version": "UTT-ACCESS-READ/0.1.0",
+    "error": null,
+    "operation": "search",
+    "result": {
+      "page": {
+        "next_cursor": "synthetic-cursor-2",
+        "page_size": 3,
+        "sort": [
+          "dataset_id:asc",
+          "record_id:asc"
+        ]
+      },
+      "records": [
+        {
+          "content_availability": "UNKNOWN",
+          "dataset_id": "synthetic-dataset-001",
+          "display_summary": null,
+          "document_role": "SYNTHETIC_NOTE",
+          "original_ids": [],
+          "project_relations": [
+            {
+              "assertion_status": "OBSERVED",
+              "evidence_ids": [],
+              "from_dataset_id": "synthetic-dataset-001",
+              "from_id": "synthetic-record-004",
+              "relation_id": "synthetic-relation-004",
+              "relation_kind": "BELONGS_TO",
+              "scope": "PROJECT",
+              "to_dataset_id": "synthetic-dataset-001",
+              "to_id": "synthetic-project-clock"
+            }
+          ],
+          "project_relations_status": "AVAILABLE",
+          "raw_text": null,
+          "raw_text_sha256": null,
+          "record_id": "synthetic-record-004",
+          "source_refs": [
+            {
+              "availability": "MISSING",
+              "content_sha256": null,
+              "dataset_id": "synthetic-dataset-001",
+              "location": null,
+              "source_id": "synthetic-source-missing",
+              "verification": "UNKNOWN",
+              "version": null
+            }
+          ],
+          "source_status": "MISSING",
+          "state": {
+            "adoption": "NOT_APPROVED",
+            "observation": "OBSERVED",
+            "proposal": "NONE",
+            "review": "EVIDENCE_REQUESTED"
+          },
+          "title": "가상 출처 누락"
+        },
+        {
+          "content_availability": "UNKNOWN",
+          "dataset_id": "synthetic-dataset-001",
+          "display_summary": null,
+          "document_role": "SYNTHETIC_NOTE",
+          "original_ids": [],
+          "project_relations": [
+            {
+              "assertion_status": "UNRESOLVED",
+              "evidence_ids": [],
+              "from_dataset_id": "synthetic-dataset-001",
+              "from_id": "synthetic-record-005",
+              "relation_id": "synthetic-relation-005",
+              "relation_kind": "BELONGS_TO",
+              "scope": "PROJECT",
+              "to_dataset_id": "synthetic-dataset-001",
+              "to_id": "synthetic-project-cloud"
+            }
+          ],
+          "project_relations_status": "AVAILABLE",
+          "raw_text": null,
+          "raw_text_sha256": null,
+          "record_id": "synthetic-record-005",
+          "source_refs": [
+            {
+              "availability": "AVAILABLE",
+              "content_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb",
+              "dataset_id": "synthetic-dataset-001",
+              "location": {
+                "boundary": "half_open",
+                "end": 12,
+                "fragment_sha256": "8c3af378197ccc1281f46c731397551020155a273c58d6bd9f089d38725480db",
+                "start": 7,
+                "target": "SYNTHETIC_SOURCE",
+                "target_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb",
+                "unit": "UTF-16",
+                "verification": "VERIFIED"
+              },
+              "source_id": "synthetic-source-one",
+              "verification": "VERIFIED",
+              "version": "synthetic-source-v1"
+            }
+          ],
+          "source_status": "AVAILABLE",
+          "state": {
+            "adoption": "NOT_APPROVED",
+            "observation": "CONFLICTING",
+            "proposal": "CONFLICT",
+            "review": "HELD"
+          },
+          "title": "가상 충돌 보류"
+        },
+        {
+          "content_availability": "UNKNOWN",
+          "dataset_id": "synthetic-dataset-001",
+          "display_summary": null,
+          "document_role": "SYNTHETIC_NOTE",
+          "original_ids": [],
+          "project_relations": [
+            {
+              "assertion_status": "OBSERVED",
+              "evidence_ids": [],
+              "from_dataset_id": "synthetic-dataset-001",
+              "from_id": "synthetic-record-006",
+              "relation_id": "synthetic-relation-006",
+              "relation_kind": "BELONGS_TO",
+              "scope": "PROJECT",
+              "to_dataset_id": "synthetic-dataset-001",
+              "to_id": "synthetic-project-clock"
+            }
+          ],
+          "project_relations_status": "AVAILABLE",
+          "raw_text": null,
+          "raw_text_sha256": null,
+          "record_id": "synthetic-record-006",
+          "source_refs": [
+            {
+              "availability": "AVAILABLE",
+              "content_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb",
+              "dataset_id": "synthetic-dataset-001",
+              "location": {
+                "boundary": "half_open",
+                "end": 12,
+                "fragment_sha256": "8c3af378197ccc1281f46c731397551020155a273c58d6bd9f089d38725480db",
+                "start": 7,
+                "target": "SYNTHETIC_SOURCE",
+                "target_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb",
+                "unit": "UTF-16",
+                "verification": "VERIFIED"
+              },
+              "source_id": "synthetic-source-one",
+              "verification": "VERIFIED",
+              "version": "synthetic-source-v1"
+            }
+          ],
+          "source_status": "AVAILABLE",
+          "state": {
+            "adoption": "NOT_APPROVED",
+            "observation": "OBSERVED",
+            "proposal": "NONE",
+            "review": "CANCELLED"
+          },
+          "title": "가상 이력"
+        }
+      ]
+    },
+    "snapshot": {
+      "dataset_id": "synthetic-dataset-001",
+      "dataset_kind": "SYNTHETIC",
+      "legacy_contracts": [],
+      "snapshot_id": "synthetic-snapshot-001",
+      "source_version": "synthetic-v1"
+    },
+    "status": "OK"
+  },
+  "search_page_3": {
+    "contract_version": "UTT-ACCESS-READ/0.1.0",
+    "error": null,
+    "operation": "search",
+    "result": {
+      "page": {
+        "next_cursor": null,
+        "page_size": 3,
+        "sort": [
+          "dataset_id:asc",
+          "record_id:asc"
+        ]
+      },
+      "records": [
+        {
+          "content_availability": "UNKNOWN",
+          "dataset_id": "synthetic-dataset-001",
+          "display_summary": "",
+          "document_role": "SYNTHETIC_NOTE",
+          "original_ids": [],
+          "project_relations": [
+            {
+              "assertion_status": "OBSERVED",
+              "evidence_ids": [],
+              "from_dataset_id": "synthetic-dataset-001",
+              "from_id": "synthetic-record-007",
+              "relation_id": "synthetic-relation-007",
+              "relation_kind": "BELONGS_TO",
+              "scope": "PROJECT",
+              "to_dataset_id": "synthetic-dataset-001",
+              "to_id": "synthetic-project-clock"
+            }
+          ],
+          "project_relations_status": "AVAILABLE",
+          "raw_text": null,
+          "raw_text_sha256": null,
+          "record_id": "synthetic-record-007",
+          "source_refs": [
+            {
+              "availability": "AVAILABLE",
+              "content_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb",
+              "dataset_id": "synthetic-dataset-001",
+              "location": {
+                "boundary": "half_open",
+                "end": 12,
+                "fragment_sha256": "8c3af378197ccc1281f46c731397551020155a273c58d6bd9f089d38725480db",
+                "start": 7,
+                "target": "SYNTHETIC_SOURCE",
+                "target_sha256": "d4ceb34df25c86e0ca7a17594703d5e6bc01fe354eaa55d5255d4f43463614cb",
+                "unit": "UTF-16",
+                "verification": "VERIFIED"
+              },
+              "source_id": "synthetic-source-one",
+              "verification": "VERIFIED",
+              "version": "synthetic-source-v1"
+            }
+          ],
+          "source_status": "AVAILABLE",
+          "state": {
+            "adoption": "UNKNOWN",
+            "observation": "OBSERVED",
+            "proposal": "NONE",
+            "review": "UNREVIEWED"
+          },
+          "title": "가상 빈 설명"
+        }
+      ]
+    },
+    "snapshot": {
+      "dataset_id": "synthetic-dataset-001",
+      "dataset_kind": "SYNTHETIC",
+      "legacy_contracts": [],
+      "snapshot_id": "synthetic-snapshot-001",
+      "source_version": "synthetic-v1"
+    },
+    "status": "OK"
+  },
+  "snapshot_changed": {
+    "contract_version": "UTT-ACCESS-READ/0.1.0",
+    "error": {
+      "code": "VERSION_MISMATCH",
+      "message": "합성 오류 예시",
+      "retryable": false
+    },
+    "operation": "search",
+    "result": null,
+    "snapshot": null,
+    "status": "ERROR"
+  },
+  "source_missing": {
+    "contract_version": "UTT-ACCESS-READ/0.1.0",
+    "error": {
+      "code": "SOURCE_MISSING",
+      "message": "합성 오류 예시",
+      "retryable": false
+    },
+    "operation": "search",
+    "result": null,
+    "snapshot": null,
+    "status": "ERROR"
+  },
+  "unsupported_contract": {
+    "contract_version": "UTT-ACCESS-READ/0.1.0",
+    "error": {
+      "code": "UNSUPPORTED_CONTRACT",
+      "message": "합성 오류 예시",
+      "retryable": false
+    },
+    "operation": "search",
+    "result": null,
+    "snapshot": null,
+    "status": "ERROR"
+  }
+}
