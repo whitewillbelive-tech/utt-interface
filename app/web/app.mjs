@@ -5,7 +5,7 @@ const button=(text,action,cls)=>{const n=el('button',text,cls);n.type='button';n
 const labels={UNREVIEWED:'미검토',HELD:'보류',EVIDENCE_REQUESTED:'근거 요청',CANCELLED:'취소',OBSERVED:'관측됨',CONFLICTING:'관측 충돌',NONE:'없음',DRAFT:'초안',CONFLICT:'충돌',NOT_APPROVED:'미승인',UNKNOWN:'미확인',AVAILABLE:'이용 가능',MISSING:'누락 확인',NOT_REQUESTED:'미요청',INACCESSIBLE:'접근 불가',USER_CONFIRMED:'사용자 확정',UNRESOLVED:'미해결'};
 const label=v=>v==null?'미확인':labels[v]??v;
 const client=new ReadClient(), listGate=new LatestRequest(), detailGate=new LatestRequest(), bootGate=new LatestRequest();
-let page=0,cursors=[null],nextCursor=null,projects=[],mode='readonly',lastId=null,timer;
+let page=0,cursors=[null],nextCursor=null,projects=[],mode='readonly',listOriginId=null,currentDetailId=null,timer;
 const NS='utt.synthetic.session.v1';
 function notify(text,kind=''){ $('notice').textContent=text;$('notice').className=kind; }
 function failure(e){notify(e.code==='VERSION_MISMATCH'?'오래된 버전입니다. 기준 다시 조회 후 첫 페이지부터 검색하세요.':`${e.code??'CONNECTION_UNAVAILABLE'} · ${e.message||'연결 실패'}`, 'error');}
@@ -15,7 +15,7 @@ function summaryStates(record){
  return box;
 }
 function projectName(id){return projects.find(p=>p.project_id===id)?.name??id;}
-function hideDetail(){detailGate.cancel();$('detail').hidden=true;$('detail').replaceChildren();$('list-view').hidden=false;}
+function hideDetail(){detailGate.cancel();currentDetailId=null;$('detail').hidden=true;$('detail').replaceChildren();$('list-view').hidden=false;}
 function invalidate(){clearTimeout(timer);listGate.cancel();hideDetail();nextCursor=null;$('results').replaceChildren();$('next').disabled=true;$('prev').disabled=true;}
 async function bootstrap(){
  invalidate();const token=bootGate.begin();client.dataset=null;projects=[];$('project').replaceChildren(new Option('전체 프로젝트 · 미분류 포함',''));
@@ -55,7 +55,7 @@ async function search(reset=false){
   if(!token.current())return;
   nextCursor=d.result.page.next_cursor;$('page-number').textContent=`${page+1} 페이지`;$('count').textContent=`이 페이지 ${d.result.records.length}건 · 한 번에 3건`;
   for(const r of d.result.records){
-   const card=el('article',undefined,'record');const b=button(r.title,()=>showDetail(r.record_id),'record-title');b.dataset.recordId=r.record_id;
+   const card=el('article',undefined,'record');const b=button(r.title,()=>{listOriginId=r.record_id;showDetail(r.record_id);},'record-title');b.dataset.recordId=r.record_id;
    card.append(el('span',r.document_role,'eyebrow'),b,el('p',r.record_id,'muted'),summaryStates(r));
    const links=el('p',r.project_relations.length?'프로젝트: ':'미분류 자료 · 이 기준에서 기록된 소속 없음');
    r.project_relations.forEach((l,i)=>{if(i)links.append(document.createTextNode(' / '));links.append(document.createTextNode(`${projectName(l.to_id)} (${label(l.assertion_status)})`));});
@@ -66,12 +66,12 @@ async function search(reset=false){
  }catch(e){if(token.current()&&e.name!=='AbortError')failure(e);}
  finally{if(token.current())$('results').setAttribute('aria-busy','false');}
 }
-function back(){hideDetail();notify('검색 조건과 페이지를 유지했습니다.');const match=[...document.querySelectorAll('[data-record-id]')].find(n=>n.dataset.recordId===lastId);match?.focus();}
+function back(){hideDetail();notify('검색 조건과 페이지를 유지했습니다.');const match=[...document.querySelectorAll('[data-record-id]')].find(n=>n.dataset.recordId===listOriginId);match?.focus();}
 async function showDetail(id){
- lastId=id;const token=detailGate.begin();listGate.cancel();$('list-view').hidden=true;$('results').setAttribute('aria-busy','false');
+ currentDetailId=id;const token=detailGate.begin();listGate.cancel();$('list-view').hidden=true;$('results').setAttribute('aria-busy','false');
  const box=$('detail');box.hidden=false;box.replaceChildren(button('← 검색 결과로',back),el('p','상세 자료를 불러오는 중…'));box.focus();notify('상세 조회 중…');
  try{
-  const d=await client.read('detail',{record_id:id},token.signal);if(!token.current())return;const r=d.result.record;
+  const d=await client.read('detail',{record_id:id},token.signal);if(!token.current()||currentDetailId!==id)return;const r=d.result.record;
   box.replaceChildren(button('← 검색 결과로',back),el('p',r.record_id,'eyebrow'),el('h2',r.title),summaryStates(r));
   box.append(el('h3','프로젝트와 분류'));
   if(!r.project_relations.length)box.append(el('p',`미분류 · 관계 상태: ${label(r.project_relations_status)}`));

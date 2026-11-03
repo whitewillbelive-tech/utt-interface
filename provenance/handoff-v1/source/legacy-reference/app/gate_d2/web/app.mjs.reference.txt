@@ -1,0 +1,62 @@
+const $=id=>document.getElementById(id),el=(tag,text,cls)=>{const x=document.createElement(tag);if(text!==undefined)x.textContent=String(text);if(cls)x.className=cls;return x};
+let token='',offset=0,total=0;const limit=30;const selected=new Map();let selectedHead=null;
+const names={UNCHANGED:'원본 보존',CLASSIFICATION_PROPOSAL:'분류 보정 검토',ADDITIONAL_UNVERIFIED:'추가 기록·신규 미확인',HISTORY_CANDIDATE:'이력 후보',SAME_BODY_REPRESENTATION_CANDIDATE:'동일 본문 표현 후보',PARTIAL_PARSE_REVIEW:'부분 파싱 검토',SOURCE_EVIDENCE_PENDING:'출처 좌표 미확인',RELATION_CONFLICT:'충돌 보류',AUTHOR_DECISION_REQUIRED:'사용자 판단 필요',UNASSIGNED_PROJECT_REVIEW:'작품 미연결',PREEXISTING_LOCAL_CLASSIFICATION_DIFF:'기존 로컬 분류 차이',MULTIPLE_LINEAGE_REVIEW:'다중 계보 검토',SAME_BODY_DIFFERENT_ROLE_REVIEW:'같은 본문·다른 역할',SAME_BODY_DIFFERENT_PROJECT_REVIEW:'같은 본문·다른 작품',SIMILAR_SOURCE_REVIEW:'같은 해시 출처 검토'};
+async function request(path){
+ try{if(!token){const r=await fetch('./api/session');if(!r.ok)throw Error('세션 오류');token=(await r.json()).session}const r=await fetch('./api/'+path,{headers:{'X-UTT-D0-Session':token}});if(!r.ok)throw Error('로컬 자료 조회 오류');return r;}catch{throw Error('로컬 검토 서버에 연결할 수 없습니다. 실행 창을 확인하세요.')}
+}
+async function api(path){return (await request(path)).json()}
+function stat(v,name){const e=el('div',undefined,'stat');e.append(el('strong',Number(v).toLocaleString()),el('span',name));return e}
+function query(){return new URLSearchParams({q:$('query').value,tag:$('tag').value,tag2:$('tag2').value,project:$('project').value,source:$('source').value,sort:$('sort').value,offset:String(offset),limit:String(limit)})}
+function nav(){$('prev').disabled=offset<=0;$('next').disabled=offset+limit>=total;}
+function collapsible(box,title,data){const d=el('details'),s=el('summary',title),p=el('pre',typeof data==='string'?data:JSON.stringify(data,null,2));d.append(s,p);box.append(d)}
+async function load(){
+ $('count').textContent='검색 중입니다…';
+ try{const d=await api('records?'+query());total=d.total;$('count').textContent=`${total.toLocaleString()}건 · ${total?offset+1:0}–${Math.min(offset+limit,total)} · 범주 중복 가능`;const box=$('results');box.replaceChildren();
+  if(!d.results.length)box.append(el('p','조건에 맞는 기록이 없습니다.'));
+  const params=new URLSearchParams();for(const r of d.results)params.append('id',r.id);const decisions=d.results.length?await api('page_decisions?'+params):{items:[],chain_head:null};if(selectedHead&&selectedHead!==decisions.chain_head){selected.clear();selectedHead=null;$('selection-status').textContent='원장 변경으로 기존 선택을 해제했습니다.'}const byId=new Map(decisions.items.map(v=>[v.record_id,v]));
+  for(const r of d.results){const card=el('div',undefined,'result'),b=el('button',r.title||r.id);b.onclick=()=>show(r.id);card.append(b,el('p',`${r.id} · 우선순위 ${r.priority}`),el('p',`기존 상태: ${r.state} / ${r.review_state} · ${r.project_text||'작품 미연결'}`));for(const t of r.tags)card.append(el('span',names[t]||t,'badge'));
+   const dec=byId.get(r.id)||{},label=el('label'),cb=el('input');cb.type='checkbox';cb.disabled=!dec.eligible;cb.checked=selected.has(r.id);cb.onchange=()=>{if(cb.checked){if(selected.size>=30){cb.checked=false;$('selection-status').textContent='최대 30건까지 선택 가능합니다.';return}if(selectedHead&&selectedHead!==decisions.chain_head){cb.checked=false;$('selection-status').textContent='원장이 변경됐습니다. 기존 선택을 해제하고 다시 확인하세요.';return}selectedHead=decisions.chain_head;selected.set(r.id,dec)}else{selected.delete(r.id);if(!selected.size)selectedHead=null}$('selection-status').textContent=`선택 ${selected.size}건 · 유효 승인 후보만 선택`;};label.append(cb,document.createTextNode(dec.eligible?' 초안에 선택':' 초안 선택 불가'));card.append(label);box.append(card)}
+ }catch(e){$('count').textContent=e.message}finally{nav()}
+}
+async function show(id){const box=$('detail');box.replaceChildren(el('p','기록을 불러오는 중입니다…'));try{
+ const d=await api('detail?id='+encodeURIComponent(id)),c=d.comparison,r=d.canonical_record;
+ box.replaceChildren(el('h2',r.title),el('p','기록 ID: '+id,'muted'),el('p','현재 Dropbox: NOT_RUN · 기준본 연계: UNVERIFIED · 사용자 판단은 별도 원장에서 확인','warning'));
+ box.append(el('h3','세 로컬 자료의 기록 비교'));
+ collapsible(box,'A 로컬 후보 · 부모 Clean · B 저장 필드',{'현재 원격':c.a_current_remote_status,'A 로컬 후보 ID':c.a_local_candidate_key||'없음','부모 ID':c.parent_key||'없음','B ID':c.b_local_key,'A 제목':c.a_local_title,'부모 제목':c.parent_title,'B 저장 제목':c.b_title,'A 본문 SHA':c.a_local_body_sha256,'부모 본문 SHA':c.parent_body_sha256,'B 본문 SHA':c.b_body_sha256,'원본 필드':c.original_record_fields_match,'본문 대조':c.body_comparison,'출처 대조':c.parent_source_evidence_match});
+ box.append(el('p',c.body_comparison==='SAME_SHA_AND_TEXT'?'기존 A 로컬 후보·부모·B의 저장 본문이 동일합니다.':'A 로컬 후보와 부모에 같은 ID가 없습니다. 현재 원격의 신규 여부는 미확인입니다.','good'));
+ box.append(el('h3','보존 본문과 좌표'));collapsible(box,'B 저장 본문 전체',d.stored_body||'(저장 본문 없음)');
+ collapsible(box,'표시 블록과 원문 좌표',r.content.display_blocks.map(x=>({text:x.text,original_fragment:x.original_fragment,locator:x.locator,transformations:x.transformations})));
+ collapsible(box,'원래 A·부모 출처 발췌와 원문 좌표',d.baseline_evidence);
+ if(d.baseline_manuscript)collapsible(box,'부모 원고와 구간',{'manuscript':d.baseline_manuscript,'segments':d.baseline_segments});
+ box.append(el('h3','출처 근거'));box.append(el('p',d.evidence_notice,'warning'));
+ if(!d.sources.length)box.append(el('p','연결된 출처가 없습니다.'));
+ for(const s of d.sources)collapsible(box,`출처 ${s.source_name||s.source_id} · ${s.d0_offline_span}`,s);
+ box.append(el('h3','계보와 관계'));collapsible(box,'확인·후보 계보 (구분 유지)',d.lineage);collapsible(box,'B 작품 직접·참고 관계와 구간',d.projects);collapsible(box,'B 관계 및 부모 관계',{'B':d.b_relations,'parent':d.baseline_relations});if(d.same_body_peers.length)collapsible(box,'같은 본문을 가진 다른 기록 (자동 병합 안 함)',d.same_body_peers);
+ box.append(el('h3','분류와 보류 사유'));collapsible(box,'원래 분류 · 기존 로컬 분류 · 제안',d.proposal);collapsible(box,'원래 상태와 작가 채택 상태',d.stored_state);if(d.conflict_hold_reason)box.append(el('p',d.conflict_hold_reason,'warning'));
+ box.append(el('h3','개별 검토에 필요한 근거'),el('p',d.action_candidate));for(const n of d.evidence_needed)box.append(el('p','• '+n));await showDecisionAndImpact(box,id);box.focus();
+ }catch(e){box.replaceChildren(el('p',e.message))}}
+$('search').onclick=()=>{offset=0;return load()};$('query').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();offset=0;load()}};$('prev').onclick=()=>{offset=Math.max(0,offset-limit);return load()};$('next').onclick=()=>{offset+=limit;return load()};
+$('export').onclick=async()=>{try{const r=await request('export?'+query()),blob=await r.blob(),u=URL.createObjectURL(blob),a=el('a');a.href=u;a.download='UTT_D2_review_queue.csv';a.click();setTimeout(()=>URL.revokeObjectURL(u),3000)}catch(e){$('count').textContent=e.message}};
+$('export-jsonl').onclick=async()=>{try{const r=await request('export-jsonl?'+query()),blob=await r.blob(),u=URL.createObjectURL(blob),a=el('a');a.href=u;a.download='UTT_D2_review_queue.jsonl';a.click();setTimeout(()=>URL.revokeObjectURL(u),3000)}catch(e){$('count').textContent=e.message}};
+async function start(){await refreshStatus();const [s,f]=await Promise.all([api('summary'),api('filters')]);$('stats').replaceChildren(stat(s.stats.records,'전체 B 기록'),stat(s.stats.baseline,'기존 로컬 기준 기록'),stat(s.stats.additional,'추가 검토 후보'),stat(s.stats.classification_76,'분류 보정'),stat(s.stats.conflict_7,'충돌 보류'));for(const t of f.tags){const o=el('option',`${names[t.tag]||t.tag} · ${t.count.toLocaleString()}`);o.value=t.tag;$('tag').append(o);const o2=o.cloneNode(true);$('tag2').append(o2)}for(const p of f.projects){const o=el('option',`${p.project_name} · ${p.count.toLocaleString()}`);o.value=p.project_id;$('project').append(o)}for(const s of f.sources){const o=el('option',s.source_id);o.value=s.source_name||s.source_id;$('source-options').append(o)}await load()}
+
+async function refreshStatus(){
+ try{const d=await api('ledger_status');const count=d.eligible_count==null?'전체 사용자 승인 후보: 미확인':d.eligible_count===0?'확인된 원장의 로컬 승인 후보 0건':`확인된 원장의 로컬 승인 후보 ${d.eligible_count}건`;const state=d.status==='USER_LEDGER_NOT_PROVIDED'?'사용자 원장 미제공: 전체 현재 사용자 결정은 알 수 없음':d.status;$('ledger-status').textContent=`모드 ${d.mode} · 원장 ${d.ledger_id||'없음'} · 파일 상태 ${state} · 사건 ${d.event_count??'미확인'}건 · 체인 ${d.chain_head_prefix||'없음'} · 읽기 전용 ${d.read_only===true?'예':'확인 필요'} · ${count} · 이번 실행에서 생성한 초안 ${d.draft_count_this_session||0}건`;return d}catch(e){$('ledger-status').textContent='원장 조회를 완료하지 못했습니다. 사용자 원장·판단 상태는 미확인입니다.';throw e}
+}
+$('refresh').onclick=()=>refreshStatus().catch(()=>{});
+$('batch').onclick=async()=>{if(!selected.size){$('selection-status').textContent='유효 승인 후보를 먼저 선택하세요.';return}try{const q=new URLSearchParams();for(const id of selected.keys())q.append('id',id);const review=await api('batch_review?'+q);if(review.chain_head!==selectedHead||review.status!=='VERIFIED_LEDGER'||review.items.some(x=>!x.eligible)){ $('selection-status').textContent='원장 변경 또는 부적격 항목으로 전체 초안 생성이 차단됐습니다. 다시 확인하세요.';return}
+ const shown=review.items.map(x=>({record_id:x.record_id,effective_event_id:x.effective_event_id,decision_version:x.decision_version,evidence_sha256:x.evidence_sha256,blockers:x.blockers,impact:x.impact}));const confirm=`선택 ${shown.length}건 · 원장 체인 ${review.chain_head}\n\n${JSON.stringify(shown,null,2)}\n\n이 항목들의 로컬 제안 초안을 하나의 파일로 생성합니까? 운영 승인이나 CANON 변경은 아닙니다.`;if(!window.confirm(confirm))return;
+ const items=review.items.map(x=>({record_id:x.record_id,effective_event_id:x.effective_event_id,decision_version:x.decision_version,evidence_sha256:x.evidence_sha256}));const r=await fetch('./api/proposal-batch',{method:'POST',headers:{'X-UTT-D0-Session':token,'Content-Type':'application/json'},body:JSON.stringify({items,expected_head:review.chain_head,confirmed:true})});const result=await r.json();if(!r.ok)throw Error(result.message||result.error_code);selected.clear();selectedHead=null;$('selection-status').textContent='로컬 초안 생성 완료: '+JSON.stringify(result.receipt);await refreshStatus();await load();
+ }catch(e){$('selection-status').textContent='전체 초안 생성 실패: '+e.message}}
+
+async function showDecisionAndImpact(box,id){
+ const [status,wrapped]=await Promise.all([api('ledger_status'),api('impact?id='+encodeURIComponent(id))]);const a=wrapped.analysis;
+ box.append(el('h3','사용자 유효 판단과 이력'));
+ const rec=(a.user_decision||a.decision||{});collapsible(box,'현재 유효 판단',rec);collapsible(box,'과거 결정 사건 이력 (시간순)',wrapped.history||[]);box.append(el('p','원장 상태: '+status.status+' · 원격: NOT_RUN · 로컬 판단은 운영 정본 승인 아님','warning'));
+ box.append(el('h3','예상 영향 및 차단 사유'));collapsible(box,'필드별 차이와 영향 · 미해결 근거',a);box.append(el('p','원격 미검증과 출처·계보 보류는 로컬 초안 작성으로 해결되지 않습니다.','warning'));
+ const button=el('button','로컬 제안 초안 만들기');const note=el('p','','muted');const eligible=rec.eligible===true;button.disabled=!eligible;
+ if(!eligible)note.textContent='초안 생성 불가: 해당 기록에 유효한 향후 제안 후보 승인 사건이 없거나 재검토가 필요합니다.';
+ button.onclick=async()=>{const eventId=rec.effective_event_id;const head=status.chain_head;if(!eventId||!head){note.textContent='현재 판단 또는 체인 정보를 확인할 수 없습니다.';return}const msg=`기록 ${id}\n사건 ${eventId}\n결정 버전 ${rec.decision_version}\n근거 스냅샷 SHA ${rec.evidence_sha256}\n체인 ${head}\n차단 사유: ${JSON.stringify(a.blockers||[])}\n영향 범위: ${JSON.stringify(a.impact||{})}\n결과물: 본문 제외 proposal.json 및 receipt.json\n\n본문 전체를 제외한 로컬 제안 초안을 생성합니까? 운영 반영 및 CANON 승인이 아닙니다.`;if(!window.confirm(msg))return;button.disabled=true;try{const r=await fetch('./api/proposal',{method:'POST',headers:{'X-UTT-D0-Session':token,'Content-Type':'application/json'},body:JSON.stringify({record_id:id,expected_head:head,expected_event_id:eventId,confirmed:true})});const x=await r.json();if(!r.ok)throw Error(x.message||x.error_code);note.textContent='로컬 초안이 별도 출력 폴더에 저장됐습니다. '+JSON.stringify(x.receipt);await refreshStatus()}catch(e){note.textContent='초안 생성 실패: '+e.message;button.disabled=false}};box.append(button,note)
+}
+
+start().catch(e=>{$('count').textContent=e.message});

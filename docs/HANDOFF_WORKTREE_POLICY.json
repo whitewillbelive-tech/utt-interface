@@ -1,0 +1,24 @@
+{
+  "intentional_changes": {
+    ".gitignore": {
+      "original_sha256": "fa8407c26c3d16cdeda3d0f484e8375fdea92866947eefdfc750c5e42ab445f0",
+      "sha256": "47713492125025173e69bd78f0058c1d647e83f419c27792c6ccec822df8dd50",
+      "reason": "원본 제외 규칙 전체를 유지하고 개발 산출물 .venv/ 및 artifacts/만 추가. docs/REMEDIATION_20261104.md 참조."
+    }
+  },
+  "development_files": [
+    "README.md",
+    ".gitattributes",
+    ".dockerignore",
+    "source/tests/reader_client.test.mjs",
+    "source/tests/response_scope.test.mjs",
+    "tests/test_reader.py",
+    "tests/test_handoff.py"
+  ],
+  "development_prefixes": [
+    "app/",
+    "tools/",
+    "docs/",
+    "provenance/"
+  ]
+}

@@ -7,7 +7,8 @@ from app.provider import SyntheticProvider, ReadOnlyAdapter, error
 
 WEB = Path(__file__).with_name('web')
 STATIC = {'/': ('index.html','text/html'), '/app.mjs': ('app.mjs','text/javascript'),
-          '/style.css': ('style.css','text/css'), '/client.mjs': ('client.mjs','text/javascript')}
+          '/style.css': ('style.css','text/css'), '/client.mjs': ('client.mjs','text/javascript'),
+          '/response-validation.mjs': ('response-validation.mjs','text/javascript')}
 
 
 def make_server(port=8765, mode='synthetic', copies=1):

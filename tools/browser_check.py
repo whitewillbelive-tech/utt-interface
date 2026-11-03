@@ -28,6 +28,8 @@ async def run():
         checks.append('bootstrap projects, components, dataset and paged list')
         # Inspect actual API boundary: only UI assets and read contract exposed.
         response=await page.request.get(base+'/HANDOFF_MANIFEST.json');assert response.status==404
+        response=await page.request.get(base+'/provenance/handoff-v1/source/tests/pure_legacy_synthetic.test.mjs');assert response.status==404
+        response=await page.request.get(base+'/provenance/handoff-v1/.env.example');assert response.status==404
         response=await page.request.post(base+'/api/write',data={});assert response.status==405
         response=await page.request.post(base+'/api/read',data={'request':request('capabilities')},headers={'Origin':'https://untrusted.invalid'});assert response.status==403
         cap=(await (await page.request.post(base+'/api/read',data={'request':request('capabilities')})).json())
@@ -35,6 +37,9 @@ async def run():
         response=await page.request.post(base+'/api/read',data={'request':request('search',**scope)})
         listing=await response.json();assert all(r['raw_text'] is None for r in listing['result']['records'])
         checks.append('HTTP read-only, origin guard, static allowlist and no list bodies')
+        await page.locator('#search').fill('가상')
+        await page.locator('#role').select_option('SYNTHETIC_NOTE')
+        await expect(page.locator('.record')).to_have_count(3)
         await page.locator('#next').click();await expect(page.locator('#page-number')).to_have_text('2 페이지')
         await page.get_by_role('button',name='가상 출처 누락',exact=True).click()
         await expect(page.locator('#detail')).to_contain_text('누락 확인')
@@ -48,6 +53,18 @@ async def run():
         await page.get_by_role('button',name='가상 이력',exact=True).click()
         await expect(page.locator('#detail')).to_contain_text('synthetic-event-002')
         await expect(page.locator('#detail')).to_contain_text('정정 대상 synthetic-event-001')
+        async def assert_origin():
+            await expect(page.locator('#page-number')).to_have_text('2 페이지')
+            await expect(page.locator('#search')).to_have_value('가상')
+            await expect(page.locator('#role')).to_have_value('SYNTHETIC_NOTE')
+            await expect(page.locator('#project')).to_have_value('')
+            await expect(page.locator('#review')).to_have_value('')
+            await expect(page.locator('#sort')).to_have_value('id_asc')
+            await expect(page.get_by_role('button',name='가상 이력',exact=True)).to_be_focused()
+        await page.get_by_role('button',name='← 검색 결과로',exact=True).click()
+        await assert_origin()
+        checks.append('page-2 history direct return preserves query, filters, sort, page and origin focus')
+        await page.get_by_role('button',name='가상 이력',exact=True).click()
         await page.get_by_role('button',name='관련 자료: 가상 관측',exact=True).click()
         await expect(page.locator('#detail h2')).to_have_text('가상 관측')
         await expect(page.locator('.source')).to_have_count(2)
@@ -62,6 +79,8 @@ async def run():
         # No operational state is promoted by the separate session simulation.
         await expect(page.locator('#detail .states')).to_contain_text('미승인')
         await page.get_by_role('button',name='← 검색 결과로',exact=True).click()
+        await assert_origin()
+        checks.append('page-2 history to related observation then back restores original history focus and conditions')
         await page.get_by_role('button',name='이전 페이지',exact=True).click()
         await expect(page.locator('#page-number')).to_have_text('1 페이지')
         await page.get_by_role('button',name='가상 관측',exact=True).click()
@@ -96,6 +115,22 @@ async def run():
         await page.locator('#scenario').select_option('normal')
         await expect(page.locator('.record')).to_have_count(1)
         checks.append('stale snapshot and connection error are distinct from empty results')
+        for internal in (False,True):
+            async def wrong_scope(route):
+                if route.request.post_data_json.get('request',{}).get('operation')!='search':
+                    return await route.continue_()
+                response=await route.fetch();data=await response.json()
+                if internal:data['result']['records'][0]['dataset_id']='synthetic-other'
+                else:data['snapshot']['dataset_id']='synthetic-other'
+                await route.fulfill(response=response,json=data)
+            await page.route('**/api/read',wrong_scope)
+            await page.get_by_role('button',name='검색',exact=True).click()
+            await expect(page.locator('#notice')).to_contain_text('RESPONSE_SCOPE_MISMATCH')
+            await expect(page.locator('.record')).to_have_count(0)
+            await page.unroute('**/api/read',wrong_scope)
+            await page.get_by_role('button',name='검색',exact=True).click()
+            await expect(page.locator('.record')).to_have_count(1)
+        checks.append('same snapshot other dataset and mixed internal dataset replies are refused in the browser')
         async def delayed(route):
             payload=route.request.post_data_json
             if payload.get('request',{}).get('query')=='older-query':

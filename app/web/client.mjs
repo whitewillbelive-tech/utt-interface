@@ -1,3 +1,4 @@
+import {validateResponse} from './response-validation.mjs';
 export const VERSION = 'UTT-ACCESS-READ/0.1.0';
 export function makeRequest(operation, values={}) {
   return {contract_version:VERSION,operation,snapshot_id:null,dataset_id:null,project_id:null,
@@ -6,15 +7,14 @@ export function makeRequest(operation, values={}) {
 export class ReadClient {
   constructor(fetcher=globalThis.fetch.bind(globalThis)) { this.fetcher=fetcher; this.dataset=null; this.scenario='normal'; this.sort='id_asc'; }
   async read(operation, values={}, signal) {
-    const request=makeRequest(operation,{dataset_id:this.dataset?.dataset_id??null,snapshot_id:this.dataset?.snapshot_id??null,...values});
+    const request=Object.freeze(makeRequest(operation,{dataset_id:this.dataset?.dataset_id??null,snapshot_id:this.dataset?.snapshot_id??null,...values}));
     const response=await this.fetcher('/api/read',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({request,sort:this.sort,scenario:this.scenario}),signal});
     if(!response.ok) throw Object.assign(Error('읽기 서버에 연결할 수 없습니다.'),{code:'CONNECTION_UNAVAILABLE'});
-    const envelope=await response.json();
-    if(envelope.contract_version!==VERSION || envelope.operation!==operation) throw Error('읽기 응답 계약이 일치하지 않습니다.');
+    let envelope;
+    try{envelope=await response.json();}catch{throw Object.assign(Error('읽기 응답이 올바른 JSON이 아닙니다.'),{code:'INVALID_RESPONSE'});}
+    validateResponse(envelope,request,VERSION);
     if(envelope.status!=='OK') throw Object.assign(Error(envelope.error?.message??'읽기 실패'),{code:envelope.error?.code});
-    if(!envelope.snapshot || (this.dataset && envelope.snapshot.snapshot_id!==this.dataset.snapshot_id))
-      throw Object.assign(Error('기준 버전이 변경됐습니다. 다시 연결하세요.'),{code:'VERSION_MISMATCH'});
     return envelope;
   }
 }

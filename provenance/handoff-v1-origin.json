@@ -1,0 +1,7 @@
+{
+  "source": "user supplied UTT_INTERFACE_HANDOFF.zip",
+  "zip_sha256": "30137cea3bd7117f1a0dfe4a34ec0807b381a28e99cf5a072ad6c41a73623e48",
+  "manifest_sha256": "8f3b19a4c17c250e7f618da2935226ad3aad64c2307401020728f98ad9930f4d",
+  "method": "verified archive file list and every manifest entry, then copied original bytes; never reconstructed from working tree",
+  "use": "immutable evidence only; not imported, executed, served or deployed"
+}
