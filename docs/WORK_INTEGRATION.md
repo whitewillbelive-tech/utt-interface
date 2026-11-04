@@ -4,13 +4,13 @@
 
 이 문서가 07·08·09의 단일 접합 계약과 상태 기록이다. 과거 인계 문서의 임시 개발 중단·push/병합 보류는 사용자 지시에 따라 갱신한다. 정상화에 필요한 커밋·push·충돌 해결·기본 브랜치 병합을 진행한다. 강제 덮어쓰기·이력 삭제·보호 규칙 우회는 하지 않는다. 운영 배포와 실제 데이터 변경은 이번 코드 병합과 별개다.
 
-조사 기준은 `fix/reader-remediation-20261104`의 `55dda98249e703017c559a85e60a0a871ce057eb`이다. 최초 원격 조회에서 이 브랜치의 더 최신 변경은 없었고, 09의 후속 UI는 `ui/09-read-navigation`의 `fdde5cd15f78b29a58be1a80b31afe5a6598257e`로 별도 존재했다. 후속 정상 변경을 유지한다. 이 SHA들을 향한 reset·강제 push는 하지 않는다. 최종 코드 기준은 병합된 기본 브랜치이며 실행 시 정확한 SHA를 고정한다.
+조사 기준은 `fix/reader-remediation-20261104`의 `55dda98249e703017c559a85e60a0a871ce057eb`이다. 최초 원격 조회에서 이 브랜치의 더 최신 변경은 없었고, 09의 후속 UI는 `ui/09-read-navigation`의 `fdde5cd15f78b29a58be1a80b31afe5a6598257e`로 별도 존재했다. 후속 정상 변경을 유지한다. 이 SHA들을 향한 reset·강제 push는 하지 않는다. 최종 코드 기준은 병합된 기본 브랜치이며 실행 시 정확한 SHA를 고정한다. 09 UI는 [PR #1](https://github.com/whitewillbelive-tech/utt-interface/pull/1)로 08 통합 브랜치에 병합했다. 통합 코드 커밋은 `6ac6accf728261c2debe9491b25fa0f50b4c9c38`이며, 로컬 검증 코드와 Git tree `9b163c888163c3271285f4c9e8fdf5e75b32cb46`가 정확히 일치한다. 그 뒤의 상태 문서 갱신은 실행 코드 변경이 아니다.
 
 | 담당 | 단독 변경 범위 | 현재 접합 상태 |
 |---|---|---|
 | 07 Work Chat | 비민감 원천 의미·projection 계약, 승인 데이터 환경의 설정·실자료 대조 | 새 원천 계약과 같은 코드 커밋의 실제 실행 결과는 아직 수신하지 않음 |
 | 08 이 Chat | provider/server/transport·공용 스키마·백엔드 시험·루트 지침·최종 통합 | 명시적 HTTPS 읽기 transport, 인증 주입, 응답 검증, 오류 처리 구현. 실제 접속은 미수행 |
-| 09 Codex Chat | `app/web/`, UI 전용 시험, 별도 UI 브랜치/PR | 위 UI 후속 커밋을 직접 검토. UI 소스 직접 수정 없이 PR로 통합 |
+| 09 Codex Chat | `app/web/`, UI 전용 시험, 별도 UI 브랜치/PR | 위 UI 후속 커밋의 6개 파일을 직접 검토하고 PR #1 병합. UI 소스 직접 수정 없음 |
 
 다른 Chat의 자동 전달·같은 파일시스템·접근 권한을 가정하지 않는다. 계약 변경과 비민감 결과는 이 저장소의 이 문서에 반영한다. 실제 DB·원문·출처 본문·원장·캐시·백업·계정·실주소·경로·키를 이 코드 환경, 이슈, PR, 로그에 요청하거나 전송하지 않는다. Scrivener·별도 Sites는 접근하지 않는다.
 
@@ -90,3 +90,7 @@ python3 -m app.server --mode readonly --connect-env --port 8765
 08 환경에서 GitHub plugin은 저장소 읽기/커밋/PR 병합에 사용 가능하다. shell `git fetch`는 `proxy:8080` 연결 거부로 실패했다. 프록시를 우회하지 않고 GitHub API로 SHA 검증한 Git 객체를 가져와 기존 이력을 보존했다. 이 장애는 07의 데이터 환경에 대한 장애를 뜻하지 않는다.
 
 지원 검증: `PYTHONDONTWRITEBYTECODE=1 python3 tools/run_checks.py`. 원형 38개·현재 변경 해시, 활성 Python/Node 시험, 전체 스키마, 기존 Chromium 흐름과 09 UI 흐름을 실행한다. 환경의 sandbox에서 소켓이 막히면 합성 루프백 시험용 네트워크 권한만 사용한다. 실행별 결과는 무시 경로 `artifacts/`에 기록하며 실제 내용은 넣지 않는다. CI·Windows 수용·실제 규모·장기 세션은 별도 검증이다.
+
+### 08 통합 검증 결과
+
+실행 `20261104T091014Z-2a639190`에서 11개 단계 모두 PASS였다. Python 42개, Node 23개, Draft 2020-12 스키마/합성 봉투 61건, 기존 Chromium 흐름, 09 Chromium 8개 묶음(브라우저 오류 0), 원형 38개와 변경 해시 검사가 통과했다. 오류 상태의 추측 변환 제거와 페이지 cursor 정체·중복·순서 보완을 포함한다. 시험 코드 tree는 위 `6ac6acc…`와 동일하다. 로컬 시험이며 CI·실자료·운영 접합 완료를 의미하지 않는다.
