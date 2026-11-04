@@ -151,7 +151,7 @@ async function search(reset=false){
  if(!synthetic())$('sort').value=providerSort;
  client.sort=$('sort').value;
  try{
-  const d=await client.read('search',{query:filterState('query')==='UNSUPPORTED'?null:$('search').value,project_id:filterSupported('project')?$('project').value||null:null,document_role:filterSupported('document_role')?$('role').value||null:null,review_status:filterSupported('review_status')?$('review').value||null:null,cursor:cursors[page],page_size:pageSize()},token.signal);
+  const d=await client.read('search',{query:filterState('query')==='UNSUPPORTED'?null:$('search').value||null,project_id:filterSupported('project')?$('project').value||null:null,document_role:filterSupported('document_role')?$('role').value||null:null,review_status:filterSupported('review_status')?$('review').value||null:null,cursor:cursors[page],page_size:pageSize()},token.signal);
   if(!token.current())return;
   nextCursor=d.result.page.next_cursor;$('page-number').textContent=`${page+1} 페이지`;$('count').textContent=`이 페이지 ${d.result.records.length}건 · 한 번에 ${d.result.page.page_size}건`;
   for(const r of d.result.records){

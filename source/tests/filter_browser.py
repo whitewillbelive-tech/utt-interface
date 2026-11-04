@@ -35,10 +35,11 @@ def features(**states):
 
 class FilterHarness:
     def __init__(self, page, value='server', *, readonly=True, feature_failure=None,
-                 fail_query=False):
+                 fail_query=False, reject_empty_query=False):
         self.page, self.value = page, value
         self.readonly, self.feature_failure = readonly, feature_failure
         self.fail_query = fail_query
+        self.reject_empty_query = reject_empty_query
         self.searches, self.requests, self.feature_methods = [], [], []
         self.changed = asyncio.Event()
 
@@ -75,6 +76,8 @@ class FilterHarness:
         if request['operation'] == 'search':
             self.searches.append(copy.deepcopy(request))
             self.changed.set()
+            if self.reject_empty_query and request['query'] == '':
+                return await route.fulfill(json=error('search', 'INVALID_REQUEST'))
             if self.fail_query and request['query']:
                 return await route.fulfill(json=error('search', 'INVALID_REQUEST'))
         await route.continue_()
@@ -218,7 +221,7 @@ async def check_query_unknown_success_failure_and_unsupported(browser, base):
         try:
             harness = FilterHarness(page, features(query='UNKNOWN'), fail_query=fail_query)
             await start(page, base, harness)
-            assert harness.searches[0]['query'] in (None, '')
+            assert harness.searches[0]['query'] is None
             await expect(page.locator('#search')).to_be_enabled()
             await expect(page.locator('#filter-support')).to_contain_text('미확인')
             query = await harness.action(lambda: page.locator('#search').fill('가상 관측'))
@@ -266,10 +269,43 @@ async def check_unavailable_or_invalid_features_preserve_list(browser, base):
             await expect(page.locator('#search')).to_be_enabled()
             for selector in ('#role', '#review', '#project'):
                 await expect(page.locator(selector)).to_be_disabled()
-            assert harness.searches[0]['query'] in (None, '')
+            assert harness.searches[0]['query'] is None
             assert all(q['project_id'] is None and q['document_role'] is None
                        and q['review_status'] is None for q in harness.searches)
             await expect(page.locator('.record')).to_have_count(3)
+        finally:
+            await page.close()
+
+
+async def check_blank_query_lists_without_requesting_explicit_empty_search(browser, base):
+    # READ/0.1 permits a provider to accept null (unspecified) while refusing
+    # explicit ''. An untouched or cleared UI input must keep listing usable.
+    for support in ('SUPPORTED', 'UNKNOWN', 'CONDITIONAL'):
+        page = await browser.new_page()
+        try:
+            harness = FilterHarness(page, features(query=support), reject_empty_query=True)
+            await start(page, base, harness)
+            assert harness.searches[0]['query'] is None
+            await expect(page.locator('#search')).to_be_enabled()
+            # Nonempty text, including whitespace-only input, reaches the
+            # provider unchanged. No trimming, retries or no-filter fallback.
+            for text in ('  가상 관측  ', '   ', '🧭 동쪽'):
+                previous = len(harness.searches)
+                query = await harness.action(lambda: page.locator('#search').fill(text))
+                assert query['query'] == text
+                assert len(harness.searches) == previous + 1
+            query = await harness.action(lambda: page.locator('#search').fill(''))
+            assert query['query'] is None
+            await expect(page.locator('.record')).to_have_count(3)
+            await harness.action(lambda: page.locator('#search').fill('가상 관측'))
+            query = await harness.action(lambda: page.get_by_role('button', name='필터 초기화', exact=True).click())
+            assert query['query'] is None and query['cursor'] is None
+            await expect(page.locator('.record')).to_have_count(3)
+            query = await harness.action(lambda: page.locator('#reconnect').click())
+            assert query['query'] is None
+            await expect(page.locator('.record')).to_have_count(3)
+            assert harness.feature_methods == ['GET', 'GET']
+            assert all(item['query'] != '' for item in harness.searches)
         finally:
             await page.close()
 
@@ -281,7 +317,8 @@ async def main():
     checks = [check_synthetic_default_features, check_supported_filters_in_readonly_mode,
               check_mixed_role_review_and_reset, check_unconfirmed_project_every_entry_point,
               check_query_unknown_success_failure_and_unsupported,
-              check_unavailable_or_invalid_features_preserve_list]
+              check_unavailable_or_invalid_features_preserve_list,
+              check_blank_query_lists_without_requesting_explicit_empty_search]
     results, browser_errors = [], []
     try:
         async with async_playwright() as pw:
