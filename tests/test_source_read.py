@@ -136,6 +136,42 @@ class SourceReadTests(unittest.TestCase):
         result = source_result(q, source, content)['result']
         self.assertEqual(result['content']['text'], '')
         self.assertEqual(result['locator_verification']['status'], 'VERIFIED')
+        for start, end in ((0, 1), (1, 1)):
+            with self.subTest(start=start, end=end):
+                source['location'].update(start=start, end=end)
+                result = source_result(q, source, content)['result']
+                self.assertEqual(result['locator_verification'],
+                                 {'status': 'MISMATCH', 'reason': 'INVALID_RANGE'})
+
+    def test_utf16_endpoints_cannot_split_surrogates_even_for_an_empty_span(self):
+        q, source, content = fictional_source()
+        self.assertEqual(content['text'], '앞 🧭 동쪽\n끝')
+        # UTF-16 position 3 lies between the compass emoji's two code units.
+        # Empty [3,3) decodes successfully, so slice decoding cannot validate it.
+        for start, end in ((3, 3), (3, 4), (3, 7), (2, 3), (0, 3)):
+            with self.subTest(start=start, end=end):
+                candidate = copy.deepcopy(source)
+                candidate['location'].update(start=start, end=end, fragment_sha256=digest(''))
+                response = source_result(q, candidate, content)
+                self.assertEqual(response['result']['locator_verification'],
+                                 {'status': 'MISMATCH', 'reason': 'INVALID_RANGE'})
+                response['result']['locator_verification'] = {
+                    'status': 'VERIFIED', 'reason': 'HASH_AND_RANGE_MATCH'}
+                with self.assertRaises(SourceReadError):
+                    validate_source_response(response, q)
+
+    def test_empty_utf16_spans_verify_at_every_complete_character_boundary(self):
+        q, source, content = fictional_source()
+        # Explicit boundaries bracket both halves of the emoji without splitting
+        # them; the end-of-text boundary is 9 code units, not 8 code points.
+        for position in (0, 1, 2, 4, 5, 6, 7, 8, 9):
+            with self.subTest(position=position):
+                candidate = copy.deepcopy(source)
+                candidate['location'].update(start=position, end=position, fragment_sha256=digest(''))
+                response = source_result(q, candidate, content)
+                self.assertEqual(response['result']['locator_verification'],
+                                 {'status': 'VERIFIED', 'reason': 'HASH_AND_RANGE_MATCH'})
+                self.assertIsNone(validate_source_response(response, q))
 
     def test_inherited_verification_never_bypasses_target_version_or_hash_checks(self):
         q, source, content = fictional_source()

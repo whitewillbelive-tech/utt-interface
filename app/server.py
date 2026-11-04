@@ -61,6 +61,9 @@ def make_server(port=8765, mode='synthetic', copies=1, *, provider=None, connect
                 return self.reply(403, {'error': 'ORIGIN_DENIED'})
             if self.path == '/api/mode':
                 return self.reply(200, {'mode': mode, 'simulation_namespace': 'utt.synthetic.session.v1' if mode=='synthetic' else None})
+            if self.path == '/api/features':
+                from app.features import features_for
+                return self.reply(200, features_for(provider))
             if self.path not in STATIC:
                 return self.reply(404, {'error': 'NOT_FOUND'})
             name, mime = STATIC[self.path]

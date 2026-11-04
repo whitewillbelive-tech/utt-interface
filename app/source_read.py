@@ -107,6 +107,16 @@ def _locator_verification(source, content):
     start, end = location['start'], location['end']
     if not 0 <= start <= end <= len(encoded) // 2:
         return _verification('MISMATCH', 'INVALID_RANGE')
+    def splits_surrogate(position):
+        if not 0 < position < len(encoded) // 2:
+            return False
+        previous = int.from_bytes(encoded[(position - 1) * 2:position * 2], 'little')
+        following = int.from_bytes(encoded[position * 2:(position + 1) * 2], 'little')
+        return 0xD800 <= previous <= 0xDBFF and 0xDC00 <= following <= 0xDFFF
+    # Decoding a slice alone misses an empty slice between surrogate halves.
+    # Both endpoints must independently be boundaries in the complete target.
+    if splits_surrogate(start) or splits_surrogate(end):
+        return _verification('MISMATCH', 'INVALID_RANGE')
     try:
         fragment = encoded[start * 2:end * 2].decode('utf-16-le')
     except UnicodeDecodeError:

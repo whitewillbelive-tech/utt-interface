@@ -214,6 +214,19 @@ class AdapterIntegrationTests(unittest.TestCase):
 
 
 class ServerIntegrationTests(unittest.TestCase):
+    def test_feature_endpoint_reports_only_known_filter_support(self):
+        with running_server(mode='readonly') as server:
+            status, response, _ = http_json(server, method='GET', path='/api/features')
+            self.assertEqual(status, 200)
+            self.assertEqual(response['contract_version'], 'UTT-READ-FEATURES/0.1.0')
+            self.assertEqual(response['filters']['document_role'], 'UNKNOWN')
+            self.assertEqual(response['filters']['review_status'], 'UNKNOWN')
+            self.assertEqual(response['filters']['tag'], 'UNSUPPORTED')
+        with running_server(mode='synthetic') as server:
+            status, response, _ = http_json(server, method='GET', path='/api/features')
+            self.assertEqual(status, 200)
+            self.assertEqual(response['filters']['document_role'], 'SUPPORTED')
+
     def test_readonly_http_search_to_detail_and_source_metadata(self):
         source = SyntheticProvider()
         self.addCleanup(source.close)
