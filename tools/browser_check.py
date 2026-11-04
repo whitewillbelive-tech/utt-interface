@@ -7,12 +7,13 @@ import threading
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from app.server import make_server
 from app.provider import request
+from source.tests.source_ui_fixtures import RECORD_TEXT, SOURCE_TEXT, make_source_fixture_server
 from playwright.async_api import async_playwright, expect
 
 ROOT=Path(__file__).resolve().parents[1]
 
 async def run():
-    servers=[make_server(0),make_server(0,mode='readonly')]
+    servers=[make_source_fixture_server(),make_server(0,mode='readonly')]
     for server in servers:threading.Thread(target=server.serve_forever,daemon=True).start()
     checks=[]
     try:
@@ -44,8 +45,11 @@ async def run():
         await page.get_by_role('button',name='가상 출처 누락',exact=True).click()
         await expect(page.locator('#detail')).to_contain_text('누락 확인')
         await expect(page.locator('#detail')).to_contain_text('원문 미확인')
-        await page.get_by_role('button',name='출처 위치 확인',exact=True).click()
-        await expect(page.locator('.source')).to_contain_text('좌표를 적용하지 않습니다')
+        await expect(page.get_by_role('button',name='출처 본문 조회',exact=True)).to_be_disabled()
+        await expect(page.locator('.source')).to_contain_text('메타데이터 상태: 누락 확인 · 출처 버전: 미확인')
+        await expect(page.locator('.source-status')).to_have_text('출처 버전 미확인 · 메타데이터만 표시합니다.')
+        await expect(page.locator('pre.source-body')).to_have_count(0)
+        await expect(page.locator('.source mark')).to_have_count(0)
         await page.get_by_role('button',name='← 검색 결과로',exact=True).click()
         await expect(page.locator('#page-number')).to_have_text('2 페이지')
         await expect(page.get_by_role('button',name='가상 출처 누락',exact=True)).to_be_focused()
@@ -68,9 +72,18 @@ async def run():
         await page.get_by_role('button',name='관련 자료: 가상 관측',exact=True).click()
         await expect(page.locator('#detail h2')).to_have_text('가상 관측')
         await expect(page.locator('.source')).to_have_count(2)
-        await page.get_by_role('button',name='출처 위치 확인',exact=True).first.click()
-        await expect(page.locator('mark')).to_have_text('🧭 동쪽')
-        await expect(page.locator('.body-text')).to_contain_text('실제 대화나 문서를 사용하지 않고')
+        await expect(page.locator('#detail > .body-text')).to_have_text(RECORD_TEXT)
+        async with page.expect_response(lambda response: response.url.endswith('/api/source')) as source_response:
+            await page.get_by_role('button',name='출처 본문 조회',exact=True).first.click()
+        assert (await (await source_response.value).json())['result']['content']['text']==SOURCE_TEXT
+        await expect(page.locator('pre.source-body')).to_have_text(SOURCE_TEXT)
+        assert await page.locator('pre.source-body').text_content()==SOURCE_TEXT
+        await expect(page.locator('pre.source-body mark')).to_have_text('🧭 동쪽')
+        await expect(page.locator('.source-verification')).to_have_text('위치 검증: VERIFIED · HASH_AND_RANGE_MATCH')
+        await expect(page.locator('#detail > .body-text')).to_have_text(RECORD_TEXT)
+        assert await page.locator('#detail > .body-text').text_content()==RECORD_TEXT
+        await expect(page.locator('#detail > .body-text mark')).to_have_count(0)
+        await expect(page.locator('#detail > .body-text')).to_contain_text('실제 대화나 문서를 사용하지 않고')
         checks.append('immutable event chain, related record navigation, multiple sources, Korean body and UTF-16 highlight')
         await page.locator('#simulation-note').fill('가상의 근거를 추가 확인하는 연습')
         await page.get_by_role('button',name='합성 세션에 기록',exact=True).click()

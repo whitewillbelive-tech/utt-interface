@@ -1,4 +1,4 @@
-import {validateResponse} from './response-validation.mjs';
+import {validateResponse,validateSourceResponse} from './response-validation.mjs';
 export const VERSION = 'UTT-ACCESS-READ/0.1.0';
 export function makeRequest(operation, values={}) {
   return {contract_version:VERSION,operation,snapshot_id:null,dataset_id:null,project_id:null,
@@ -6,14 +6,14 @@ export function makeRequest(operation, values={}) {
 }
 export class ReadClient {
   constructor(fetcher=globalThis.fetch.bind(globalThis)) { this.fetcher=fetcher; this.dataset=null; this.scenario='normal'; this.sort='id_asc'; }
-  async fetchResponse(path, options) {
+  async fetchResponse(path, options, acceptedStatuses=[]) {
     let response;
     try { response=await this.fetcher(path,options); }
     catch(error) {
       if(error.name==='AbortError')throw error;
       throw Object.assign(Error('읽기 서버에 연결할 수 없습니다.'),{code:'CONNECTION_UNAVAILABLE'});
     }
-    if(!response.ok) {
+    if(!response.ok&&!acceptedStatuses.includes(response.status)) {
       // HTTP status is transport evidence, not a new read-contract error enum.
       const code=response.status===401?'AUTHENTICATION_REQUIRED':response.status===403?'ACCESS_DENIED':
         [502,503,504].includes(response.status)?'CONNECTION_UNAVAILABLE':'HTTP_ERROR';
@@ -46,6 +46,24 @@ export class ReadClient {
     validateResponse(envelope,request,VERSION);
     if(envelope.status!=='OK') throw Object.assign(Error(envelope.error?.message??'읽기 실패'),{code:envelope.error?.code});
     return envelope;
+  }
+  async readSource(identity,signal) {
+    const fields=['dataset_id','snapshot_id','record_id','source_id','source_version'];
+    if(!identity||!fields.every(key=>typeof identity[key]==='string'&&identity[key].length>0))
+      throw Object.assign(Error('확인된 출처 식별자와 버전이 필요합니다.'),{code:'INVALID_REQUEST'});
+    const request=Object.freeze(Object.fromEntries([['contract_version','UTT-SOURCE-READ/0.1.0'],...fields.map(key=>[key,identity[key]])]));
+    const transport=await this.fetchResponse('/api/source',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request),signal},[400]);
+    let response;
+    try{response=await transport.json();}
+    catch(error){
+      if(error.name==='AbortError')throw error;
+      throw Object.assign(Error('출처 읽기 응답이 올바른 JSON이 아닙니다.'),{code:'INVALID_RESPONSE'});
+    }
+    const highlight=await validateSourceResponse(response,request);
+    if(!transport.ok&&response.status!=='ERROR')throw Object.assign(Error('잘못된 출처 오류 응답입니다.'),{code:'INVALID_RESPONSE'});
+    if(response.status==='ERROR')throw Object.assign(Error('출처 읽기 요청을 완료하지 못했습니다.'),{code:response.error.code});
+    // Client-only view state; the wire envelope is kept unchanged.
+    return {response,highlight};
   }
 }
 // Abort is an optimization; generation guards also reject already-resolved stale work.
