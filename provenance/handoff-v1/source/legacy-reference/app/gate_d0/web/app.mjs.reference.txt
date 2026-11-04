@@ -1,0 +1,39 @@
+const $=id=>document.getElementById(id),el=(tag,text,cls)=>{const x=document.createElement(tag);if(text!==undefined)x.textContent=String(text);if(cls)x.className=cls;return x};
+let token='',offset=0,total=0;const limit=30;
+const names={UNCHANGED:'원본 보존',CLASSIFICATION_PROPOSAL:'분류 보정 검토',ADDITIONAL_UNVERIFIED:'추가 기록·신규 미확인',HISTORY_CANDIDATE:'이력 후보',SAME_BODY_REPRESENTATION_CANDIDATE:'동일 본문 표현 후보',PARTIAL_PARSE_REVIEW:'부분 파싱 검토',SOURCE_EVIDENCE_PENDING:'출처 좌표 미확인',RELATION_CONFLICT:'충돌 보류',AUTHOR_DECISION_REQUIRED:'사용자 판단 필요',UNASSIGNED_PROJECT_REVIEW:'작품 미연결',PREEXISTING_LOCAL_CLASSIFICATION_DIFF:'기존 로컬 분류 차이',MULTIPLE_LINEAGE_REVIEW:'다중 계보 검토',SAME_BODY_DIFFERENT_ROLE_REVIEW:'같은 본문·다른 역할',SAME_BODY_DIFFERENT_PROJECT_REVIEW:'같은 본문·다른 작품',SIMILAR_SOURCE_REVIEW:'같은 해시 출처 검토'};
+async function request(path){
+ try{if(!token){const r=await fetch('./api/session');if(!r.ok)throw Error('세션 오류');token=(await r.json()).session}const r=await fetch('./api/'+path,{headers:{'X-UTT-D0-Session':token}});if(!r.ok)throw Error('로컬 자료 조회 오류');return r;}catch{throw Error('로컬 검토 서버에 연결할 수 없습니다. 실행 창을 확인하세요.')}
+}
+async function api(path){return (await request(path)).json()}
+function stat(v,name){const e=el('div',undefined,'stat');e.append(el('strong',Number(v).toLocaleString()),el('span',name));return e}
+function query(){return new URLSearchParams({q:$('query').value,tag:$('tag').value,project:$('project').value,source:$('source').value,sort:$('sort').value,offset:String(offset),limit:String(limit)})}
+function nav(){$('prev').disabled=offset<=0;$('next').disabled=offset+limit>=total;}
+function collapsible(box,title,data){const d=el('details'),s=el('summary',title),p=el('pre',typeof data==='string'?data:JSON.stringify(data,null,2));d.append(s,p);box.append(d)}
+async function load(){
+ $('count').textContent='검색 중입니다…';
+ try{const d=await api('records?'+query());total=d.total;$('count').textContent=`${total.toLocaleString()}건 · ${total?offset+1:0}–${Math.min(offset+limit,total)} · 범주 중복 가능`;const box=$('results');box.replaceChildren();
+  if(!d.results.length)box.append(el('p','조건에 맞는 기록이 없습니다.'));
+  for(const r of d.results){const card=el('div',undefined,'result'),b=el('button',r.title||r.id);b.onclick=()=>show(r.id);card.append(b,el('p',`${r.id} · 우선순위 ${r.priority}`),el('p',`기존 상태: ${r.state} / ${r.review_state} · ${r.project_text||'작품 미연결'}`));for(const t of r.tags)card.append(el('span',names[t]||t,'badge'));box.append(card)}
+ }catch(e){$('count').textContent=e.message}finally{nav()}
+}
+async function show(id){const box=$('detail');box.replaceChildren(el('p','기록을 불러오는 중입니다…'));try{
+ const d=await api('detail?id='+encodeURIComponent(id)),c=d.comparison,r=d.canonical_record;
+ box.replaceChildren(el('h2',r.title),el('p','기록 ID: '+id,'muted'),el('p','현재 Dropbox: NOT_RUN · 기준본 연계: UNVERIFIED · 사용자 결정: 생성되지 않음','warning'));
+ box.append(el('h3','세 로컬 자료의 기록 비교'));
+ collapsible(box,'A 로컬 후보 · 부모 Clean · B 저장 필드',{'현재 원격':c.a_current_remote_status,'A 로컬 후보 ID':c.a_local_candidate_key||'없음','부모 ID':c.parent_key||'없음','B ID':c.b_local_key,'A 제목':c.a_local_title,'부모 제목':c.parent_title,'B 저장 제목':c.b_title,'A 본문 SHA':c.a_local_body_sha256,'부모 본문 SHA':c.parent_body_sha256,'B 본문 SHA':c.b_body_sha256,'원본 필드':c.original_record_fields_match,'본문 대조':c.body_comparison,'출처 대조':c.parent_source_evidence_match});
+ box.append(el('p',c.body_comparison==='SAME_SHA_AND_TEXT'?'기존 A 로컬 후보·부모·B의 저장 본문이 동일합니다.':'A 로컬 후보와 부모에 같은 ID가 없습니다. 현재 원격의 신규 여부는 미확인입니다.','good'));
+ box.append(el('h3','보존 본문과 좌표'));collapsible(box,'B 저장 본문 전체',d.stored_body||'(저장 본문 없음)');
+ collapsible(box,'표시 블록과 원문 좌표',r.content.display_blocks.map(x=>({text:x.text,original_fragment:x.original_fragment,locator:x.locator,transformations:x.transformations})));
+ collapsible(box,'원래 A·부모 출처 발췌와 원문 좌표',d.baseline_evidence);
+ if(d.baseline_manuscript)collapsible(box,'부모 원고와 구간',{'manuscript':d.baseline_manuscript,'segments':d.baseline_segments});
+ box.append(el('h3','출처 근거'));box.append(el('p',d.evidence_notice,'warning'));
+ if(!d.sources.length)box.append(el('p','연결된 출처가 없습니다.'));
+ for(const s of d.sources)collapsible(box,`출처 ${s.source_name||s.source_id} · ${s.d0_offline_span}`,s);
+ box.append(el('h3','계보와 관계'));collapsible(box,'확인·후보 계보 (구분 유지)',d.lineage);collapsible(box,'B 작품 직접·참고 관계와 구간',d.projects);collapsible(box,'B 관계 및 부모 관계',{'B':d.b_relations,'parent':d.baseline_relations});if(d.same_body_peers.length)collapsible(box,'같은 본문을 가진 다른 기록 (자동 병합 안 함)',d.same_body_peers);
+ box.append(el('h3','분류와 보류 사유'));collapsible(box,'원래 분류 · 기존 로컬 분류 · 제안',d.proposal);collapsible(box,'원래 상태와 작가 채택 상태',d.stored_state);if(d.conflict_hold_reason)box.append(el('p',d.conflict_hold_reason,'warning'));
+ box.append(el('h3','개별 검토에 필요한 근거'),el('p',d.action_candidate));for(const n of d.evidence_needed)box.append(el('p','• '+n));box.focus();
+ }catch(e){box.replaceChildren(el('p',e.message))}}
+$('search').onclick=()=>{offset=0;return load()};$('query').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();offset=0;load()}};$('prev').onclick=()=>{offset=Math.max(0,offset-limit);return load()};$('next').onclick=()=>{offset+=limit;return load()};
+$('export').onclick=async()=>{try{const r=await request('export?'+query()),blob=await r.blob(),u=URL.createObjectURL(blob),a=el('a');a.href=u;a.download='UTT_D0_review_queue.csv';a.click();setTimeout(()=>URL.revokeObjectURL(u),3000)}catch(e){$('count').textContent=e.message}};
+async function start(){const [s,f]=await Promise.all([api('summary'),api('filters')]);$('stats').replaceChildren(stat(s.stats.records,'전체 B 기록'),stat(s.stats.baseline,'기존 로컬 기준 기록'),stat(s.stats.additional,'추가 검토 후보'),stat(s.stats.classification_76,'분류 보정'),stat(s.stats.conflict_7,'충돌 보류'));for(const t of f.tags){const o=el('option',`${names[t.tag]||t.tag} · ${t.count.toLocaleString()}`);o.value=t.tag;$('tag').append(o)}for(const p of f.projects){const o=el('option',`${p.project_name} · ${p.count.toLocaleString()}`);o.value=p.project_id;$('project').append(o)}for(const s of f.sources){const o=el('option',s.source_id);o.value=s.source_name||s.source_id;$('source-options').append(o)}await load()}
+start().catch(e=>{$('count').textContent=e.message});

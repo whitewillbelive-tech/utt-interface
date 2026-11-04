@@ -1,0 +1,22 @@
+# Never stage real data or secrets
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite3
+*.db
+*.db-*
+*.zip
+*.tar
+*.gz
+*.bak
+*.log
+*.pem
+*.key
+__pycache__/
+*.py[cod]
+node_modules/
+cache/
+backups/
+exports/
+local-data/

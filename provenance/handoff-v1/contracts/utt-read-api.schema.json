@@ -1,0 +1,1155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:utt:access-read:0.1.0",
+  "title": "UTT read access draft 0.1.0",
+  "description": "Transport-neutral draft; no claim of current production support. Validate documents against $defs/request or $defs/response.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/request"
+    },
+    {
+      "$ref": "#/$defs/response"
+    }
+  ],
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "contract_version": {
+          "const": "UTT-ACCESS-READ/0.1.0"
+        },
+        "operation": {
+          "enum": [
+            "capabilities",
+            "projects",
+            "search",
+            "detail",
+            "related_history"
+          ]
+        },
+        "snapshot_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "dataset_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "project_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "record_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "query": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "document_role": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "review_status": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "page_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      },
+      "required": [
+        "contract_version",
+        "operation",
+        "snapshot_id",
+        "dataset_id",
+        "project_id",
+        "record_id",
+        "query",
+        "document_role",
+        "review_status",
+        "page_size",
+        "cursor"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "enum": [
+                  "projects",
+                  "search",
+                  "detail",
+                  "related_history"
+                ]
+              }
+            },
+            "required": [
+              "operation"
+            ]
+          },
+          "then": {
+            "properties": {
+              "dataset_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "snapshot_id": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "enum": [
+                  "detail",
+                  "related_history"
+                ]
+              }
+            },
+            "required": [
+              "operation"
+            ]
+          },
+          "then": {
+            "properties": {
+              "record_id": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "response": {
+      "type": "object",
+      "properties": {
+        "contract_version": {
+          "const": "UTT-ACCESS-READ/0.1.0"
+        },
+        "operation": {
+          "enum": [
+            "capabilities",
+            "projects",
+            "search",
+            "detail",
+            "related_history"
+          ]
+        },
+        "status": {
+          "enum": [
+            "OK",
+            "ERROR"
+          ]
+        },
+        "snapshot": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/dataset"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "error": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/error"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "contract_version",
+        "operation",
+        "status",
+        "snapshot",
+        "result",
+        "error"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "ERROR"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "type": "null"
+              },
+              "error": {
+                "$ref": "#/$defs/error"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "OK"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "snapshot": {
+                "$ref": "#/$defs/dataset"
+              },
+              "error": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "capabilities"
+              },
+              "status": {
+                "const": "OK"
+              }
+            },
+            "required": [
+              "operation",
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "$ref": "#/$defs/capabilities_result"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "projects"
+              },
+              "status": {
+                "const": "OK"
+              }
+            },
+            "required": [
+              "operation",
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "$ref": "#/$defs/projects_result"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "search"
+              },
+              "status": {
+                "const": "OK"
+              }
+            },
+            "required": [
+              "operation",
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "$ref": "#/$defs/search_result"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "detail"
+              },
+              "status": {
+                "const": "OK"
+              }
+            },
+            "required": [
+              "operation",
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "$ref": "#/$defs/detail_result"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "related_history"
+              },
+              "status": {
+                "const": "OK"
+              }
+            },
+            "required": [
+              "operation",
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "$ref": "#/$defs/related_history_result"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "dataset": {
+      "type": "object",
+      "properties": {
+        "dataset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataset_kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "snapshot_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "legacy_contracts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "dataset_id",
+        "dataset_kind",
+        "snapshot_id",
+        "source_version",
+        "legacy_contracts"
+      ],
+      "additionalProperties": false
+    },
+    "state": {
+      "type": "object",
+      "properties": {
+        "observation": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "review": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "proposal": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "adoption": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      },
+      "required": [
+        "observation",
+        "review",
+        "proposal",
+        "adoption"
+      ],
+      "additionalProperties": false
+    },
+    "location": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "unit": {
+          "enum": [
+            "unicode_code_point",
+            "UTF-16",
+            "byte"
+          ]
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "boundary": {
+          "const": "half_open"
+        },
+        "target_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "fragment_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "verification": {
+          "enum": [
+            "VERIFIED",
+            "UNVERIFIED",
+            "UNKNOWN"
+          ]
+        }
+      },
+      "required": [
+        "target",
+        "unit",
+        "start",
+        "end",
+        "boundary",
+        "target_sha256",
+        "fragment_sha256",
+        "verification"
+      ],
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "availability": {
+          "enum": [
+            "AVAILABLE",
+            "MISSING",
+            "UNKNOWN",
+            "INACCESSIBLE"
+          ]
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "content_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "location": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/location"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "verification": {
+          "enum": [
+            "VERIFIED",
+            "UNVERIFIED",
+            "UNKNOWN"
+          ]
+        }
+      },
+      "required": [
+        "source_id",
+        "dataset_id",
+        "availability",
+        "version",
+        "content_sha256",
+        "location",
+        "verification"
+      ],
+      "additionalProperties": false
+    },
+    "relation": {
+      "type": "object",
+      "properties": {
+        "from_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "relation_kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assertion_status": {
+          "enum": [
+            "OBSERVED",
+            "USER_CONFIRMED",
+            "CANDIDATE",
+            "UNRESOLVED",
+            "UNKNOWN"
+          ]
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "from_dataset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to_dataset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "relation_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "from_id",
+        "to_id",
+        "relation_kind",
+        "scope",
+        "assertion_status",
+        "evidence_ids",
+        "from_dataset_id",
+        "to_dataset_id",
+        "relation_id"
+      ],
+      "additionalProperties": false
+    },
+    "project": {
+      "type": "object",
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "former_names": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "classification_observed": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "membership_user_confirmed": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "state": {
+          "$ref": "#/$defs/state"
+        }
+      },
+      "required": [
+        "project_id",
+        "dataset_id",
+        "name",
+        "aliases",
+        "former_names",
+        "classification_observed",
+        "membership_user_confirmed",
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "component": {
+      "type": "object",
+      "properties": {
+        "component_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parent_component_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "relationship_status": {
+          "enum": [
+            "OBSERVED",
+            "USER_CONFIRMED",
+            "CANDIDATE",
+            "UNRESOLVED",
+            "UNKNOWN"
+          ]
+        }
+      },
+      "required": [
+        "component_id",
+        "dataset_id",
+        "name",
+        "parent_component_id",
+        "relationship_status"
+      ],
+      "additionalProperties": false
+    },
+    "record": {
+      "type": "object",
+      "properties": {
+        "record_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "original_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "document_role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "$ref": "#/$defs/state"
+        },
+        "display_summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "project_relations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relation"
+          }
+        },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source"
+          }
+        },
+        "source_status": {
+          "enum": [
+            "AVAILABLE",
+            "MISSING",
+            "UNKNOWN",
+            "INACCESSIBLE",
+            "NOT_REQUESTED"
+          ]
+        },
+        "content_availability": {
+          "enum": [
+            "AVAILABLE",
+            "MISSING",
+            "UNKNOWN",
+            "INACCESSIBLE",
+            "NOT_REQUESTED"
+          ]
+        },
+        "raw_text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "raw_text_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "project_relations_status": {
+          "enum": [
+            "AVAILABLE",
+            "MISSING",
+            "UNKNOWN",
+            "INACCESSIBLE",
+            "NOT_REQUESTED"
+          ]
+        }
+      },
+      "required": [
+        "record_id",
+        "dataset_id",
+        "original_ids",
+        "title",
+        "document_role",
+        "state",
+        "display_summary",
+        "project_relations",
+        "source_refs",
+        "source_status",
+        "content_availability",
+        "raw_text",
+        "raw_text_sha256",
+        "project_relations_status"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "content_availability": {
+                "const": "AVAILABLE"
+              }
+            },
+            "required": [
+              "content_availability"
+            ]
+          },
+          "then": {
+            "properties": {
+              "raw_text": {
+                "type": "string"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "raw_text": {
+                "type": "null"
+              },
+              "raw_text_sha256": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "history": {
+      "type": "object",
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "record_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "event_contract": {
+          "type": "string",
+          "minLength": 1
+        },
+        "event_kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "supersedes": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "provenance_diagnostic": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "event_payload_preservation": {
+          "enum": [
+            "UNTOUCHED",
+            "UNVERIFIED",
+            "NOT_AVAILABLE"
+          ]
+        }
+      },
+      "required": [
+        "event_id",
+        "dataset_id",
+        "record_id",
+        "event_contract",
+        "event_kind",
+        "decision",
+        "supersedes",
+        "provenance_diagnostic",
+        "event_payload_preservation"
+      ],
+      "additionalProperties": false
+    },
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "enum": [
+            "ITEM_NOT_FOUND",
+            "SOURCE_MISSING",
+            "CONNECTION_UNAVAILABLE",
+            "VERSION_MISMATCH",
+            "UNSUPPORTED_CONTRACT",
+            "INVALID_REQUEST",
+            "INTERNAL_ERROR"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "additionalProperties": false
+    },
+    "page": {
+      "type": "object",
+      "properties": {
+        "page_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "sort": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 2
+        }
+      },
+      "required": [
+        "page_size",
+        "next_cursor",
+        "sort"
+      ],
+      "additionalProperties": false
+    },
+    "capabilities_result": {
+      "type": "object",
+      "properties": {
+        "dataset": {
+          "$ref": "#/$defs/dataset"
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "sort_order": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "max_page_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "writes_supported": {
+          "const": false
+        }
+      },
+      "required": [
+        "dataset",
+        "operations",
+        "sort_order",
+        "max_page_size",
+        "writes_supported"
+      ],
+      "additionalProperties": false
+    },
+    "projects_result": {
+      "type": "object",
+      "properties": {
+        "projects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/project"
+          }
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/component"
+          }
+        },
+        "relations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relation"
+          }
+        },
+        "page": {
+          "$ref": "#/$defs/page"
+        }
+      },
+      "required": [
+        "projects",
+        "components",
+        "relations",
+        "page"
+      ],
+      "additionalProperties": false
+    },
+    "search_result": {
+      "type": "object",
+      "properties": {
+        "records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/record"
+          }
+        },
+        "page": {
+          "$ref": "#/$defs/page"
+        }
+      },
+      "required": [
+        "records",
+        "page"
+      ],
+      "additionalProperties": false
+    },
+    "detail_result": {
+      "type": "object",
+      "properties": {
+        "record": {
+          "$ref": "#/$defs/record"
+        },
+        "related_projects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/project"
+          }
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source"
+          }
+        }
+      },
+      "required": [
+        "record",
+        "related_projects",
+        "sources"
+      ],
+      "additionalProperties": false
+    },
+    "related_history_result": {
+      "type": "object",
+      "properties": {
+        "related_records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/record"
+          }
+        },
+        "relations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relation"
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/history"
+          }
+        },
+        "page": {
+          "$ref": "#/$defs/page"
+        },
+        "history_status": {
+          "enum": [
+            "AVAILABLE",
+            "MISSING",
+            "UNKNOWN",
+            "INACCESSIBLE"
+          ]
+        }
+      },
+      "required": [
+        "related_records",
+        "relations",
+        "events",
+        "page",
+        "history_status"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

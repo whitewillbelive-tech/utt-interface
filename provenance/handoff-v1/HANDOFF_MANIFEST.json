@@ -1,0 +1,198 @@
+{
+  "contract_version": "UTT-ACCESS-READ/0.1.0 DRAFT",
+  "source_origin": "UTT D-2 Windows baseline; see source/SOURCE_ORIGIN.json",
+  "source_status": "PARTIAL_STATIC_REFERENCE_AND_SYNTHETIC_PURE_MODULES",
+  "self_hash_policy": "HANDOFF_MANIFEST.json excluded from files list",
+  "files": [
+    {
+      "path": ".env.example",
+      "size_bytes": 86,
+      "sha256": "75ff0ac8e2d796cc25b0c07444a65bb1448533f1ad577762d22d2a6f152d17f9"
+    },
+    {
+      "path": ".gitignore",
+      "size_bytes": 207,
+      "sha256": "fa8407c26c3d16cdeda3d0f484e8375fdea92866947eefdfc750c5e42ab445f0"
+    },
+    {
+      "path": "AGENTS.md",
+      "size_bytes": 2143,
+      "sha256": "84fdb398f6f25e904231f9150f15e54d8e65bf6f712b857ed1d3b6b05cf93636"
+    },
+    {
+      "path": "README_HANDOFF.md",
+      "size_bytes": 3206,
+      "sha256": "c9df54025668a0e41732f7632cd2062f1e91dacb68066287489a91a7dce70f45"
+    },
+    {
+      "path": "VALIDATION_SUMMARY.md",
+      "size_bytes": 3456,
+      "sha256": "313481eb7939091a6148407fa2223043a0c2b029fa95ede087bad75e9cfdb601"
+    },
+    {
+      "path": "contracts/READ_CONTRACT_DRAFT.md",
+      "size_bytes": 12824,
+      "sha256": "4911b14722db25032b906eb93e32fdb90e48a0e4b3224dace971b7e65d90f910"
+    },
+    {
+      "path": "contracts/utt-read-api.schema.json",
+      "size_bytes": 24320,
+      "sha256": "b71ed346a9c7c606634d19cc4d8bd34fe83c6bad3c9df8987520dbfca2096246"
+    },
+    {
+      "path": "fixtures/synthetic/README.md",
+      "size_bytes": 1415,
+      "sha256": "8030f65247536acec34fce17c683f400c981a6662f3bad79fe14a9af83b6c65f"
+    },
+    {
+      "path": "fixtures/synthetic/contract_examples.json",
+      "size_bytes": 46087,
+      "sha256": "b5e7562369c9845ae8a68ce479b59505ae25988f00c34239aacd4655166b0add"
+    },
+    {
+      "path": "fixtures/synthetic/fixture.json",
+      "size_bytes": 14399,
+      "sha256": "8d8b0ff9292bd43c834a0d9ee5004028eb1ef5013016a8303f0622d5bea03595"
+    },
+    {
+      "path": "fixtures/synthetic/generate.py",
+      "size_bytes": 11283,
+      "sha256": "c54acbae6b4128eed3bc646dc306f77a5a337559f49294f89f1872cd791056bb"
+    },
+    {
+      "path": "source/SOURCE_ORIGIN.json",
+      "size_bytes": 8160,
+      "sha256": "16f5e0629d05a4c0ccb04f384b8f131e022f1804a2002441120e88e6ee5309a8"
+    },
+    {
+      "path": "source/SOURCE_README.md",
+      "size_bytes": 5880,
+      "sha256": "36deafd0a94487443093324f916cc2a922008881a83a9e04cb502347493feb99"
+    },
+    {
+      "path": "source/legacy-reference/app/gate_d0/web/app.mjs.reference.txt",
+      "size_bytes": 7192,
+      "sha256": "0c5ff88784c8d560abfe36d6432fb7d530e801a01c13a5fc96ae1c5311a80215"
+    },
+    {
+      "path": "source/legacy-reference/app/gate_d0/web/index.html",
+      "size_bytes": 2880,
+      "sha256": "cd94240e7e355f7e02b0575e6fc0830c934960cea19b9d4bf8a0231464ae4321"
+    },
+    {
+      "path": "source/legacy-reference/app/gate_d0/web/style.css",
+      "size_bytes": 2836,
+      "sha256": "9ca56895b84881437d254cd437ae97a39c449af81abc66ec24af9ff0b890f53a"
+    },
+    {
+      "path": "source/legacy-reference/app/gate_d1/web/app.mjs.reference.txt",
+      "size_bytes": 12169,
+      "sha256": "5d6b3e4bcbb4ac30270126aebb5eb86465e0e4b080f861820c7135ce96fc32be"
+    },
+    {
+      "path": "source/legacy-reference/app/gate_d1/web/index.html",
+      "size_bytes": 3630,
+      "sha256": "70ef6d7900d26e4c1c83000f016318929ddcdf50ceb41f39805385344ec0671b"
+    },
+    {
+      "path": "source/legacy-reference/app/gate_d1/web/style.css",
+      "size_bytes": 2836,
+      "sha256": "9ca56895b84881437d254cd437ae97a39c449af81abc66ec24af9ff0b890f53a"
+    },
+    {
+      "path": "source/legacy-reference/app/gate_d11/web/app.mjs.reference.txt",
+      "size_bytes": 14880,
+      "sha256": "102f340fc25cdaaf89cf4a0f36c668f29f49b891b9ba40e5c35c606ce2cd12a7"
+    },
+    {
+      "path": "source/legacy-reference/app/gate_d11/web/index.html",
+      "size_bytes": 4368,
+      "sha256": "21e7098ca4a60424601d587e08aafb25bb1628d666463c96dc5ce493013f8712"
+    },
+    {
+      "path": "source/legacy-reference/app/gate_d11/web/style.css",
+      "size_bytes": 2836,
+      "sha256": "9ca56895b84881437d254cd437ae97a39c449af81abc66ec24af9ff0b890f53a"
+    },
+    {
+      "path": "source/legacy-reference/app/gate_d2/web/app.mjs.reference.txt",
+      "size_bytes": 13966,
+      "sha256": "197c03b86568fd4909c9b6ad0cf0610fa4c9425b21e9e4a5cd93436d92958922"
+    },
+    {
+      "path": "source/legacy-reference/app/gate_d2/web/index.html",
+      "size_bytes": 3644,
+      "sha256": "549d363fa2332aec9d79c84b70ac4f71ea12e66d3f70d91fd17ae8963012fe2f"
+    },
+    {
+      "path": "source/legacy-reference/app/gate_d2/web/style.css",
+      "size_bytes": 2836,
+      "sha256": "9ca56895b84881437d254cd437ae97a39c449af81abc66ec24af9ff0b890f53a"
+    },
+    {
+      "path": "source/legacy-reference/app/web/app.mjs.reference.txt",
+      "size_bytes": 19682,
+      "sha256": "4574230676644068b11eb0ec1158240aa87bfe4dc0ef1f535119a7a968a127c4"
+    },
+    {
+      "path": "source/legacy-reference/app/web/gate-c/gate.css",
+      "size_bytes": 3560,
+      "sha256": "c1584c01312393f2702bf56e68fc667f1ff4217d516cfb0dfcd48bcb3fccca05"
+    },
+    {
+      "path": "source/legacy-reference/app/web/gate-c/gate.mjs.reference.txt",
+      "size_bytes": 16120,
+      "sha256": "18bb927c7b7f05b02ffec2cf84cd7547d696d746a1c6b46cf56b5ed44208281a"
+    },
+    {
+      "path": "source/legacy-reference/app/web/gate-c/index.html",
+      "size_bytes": 5031,
+      "sha256": "15d6446d5b6801e01f36cf7d4907a9e0049194c5d1297c27c5d9c389e631d962"
+    },
+    {
+      "path": "source/legacy-reference/app/web/index.html",
+      "size_bytes": 6370,
+      "sha256": "dac6040a9a287a90ea22f9f48d365402c6f155f7e5915269feb777a6e409a98a"
+    },
+    {
+      "path": "source/legacy-reference/app/web/style.css",
+      "size_bytes": 4066,
+      "sha256": "212e98cb8ff9a84ca989bb341a7d10276ff0d4f1d3890a04ac71d37e276d4b5d"
+    },
+    {
+      "path": "source/safe_modules/readmodel/canonical-view.mjs",
+      "size_bytes": 711,
+      "sha256": "3dbc5e6378b417503029130f9edde735c9633529035bf474362e9d739cefb641"
+    },
+    {
+      "path": "source/safe_modules/readmodel/readmodel-parser.mjs",
+      "size_bytes": 7712,
+      "sha256": "024868b0df33590d48fb320f9cddffdf3afcad153495a58c683395e08a714ef9"
+    },
+    {
+      "path": "source/safe_modules/readmodel/readmodel-versions.mjs",
+      "size_bytes": 383,
+      "sha256": "185f72130305cceae6e5dc9852e2099632e00a736af647aef4825b6c88a8fa23"
+    },
+    {
+      "path": "source/safe_modules/readmodel/readmodel.mjs",
+      "size_bytes": 18123,
+      "sha256": "bdc356a6d40a1771b5aa774ce10f9c24e122633d8e10a49daaeb280d723a9721"
+    },
+    {
+      "path": "source/tests/pure_legacy_synthetic.test.mjs",
+      "size_bytes": 2630,
+      "sha256": "9a9aeac75dded77f68c13d26b18d14f0a6edfed8523c9b38b2cfde90c10a69f2"
+    },
+    {
+      "path": "tests/test_synthetic_contract_schema.py",
+      "size_bytes": 3914,
+      "sha256": "8d8c522a585d68c53b9de9912961879eb63b042f57f5aaaa5dee10d76a71359d"
+    },
+    {
+      "path": "tests/test_synthetic_fixtures.py",
+      "size_bytes": 6377,
+      "sha256": "65b566c404d9313c6172dd459ec0a93a2c4eb00be4b1ea3cf52fef35adf5b7db"
+    }
+  ]
+}

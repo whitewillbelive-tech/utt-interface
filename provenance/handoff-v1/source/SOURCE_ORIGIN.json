@@ -1,0 +1,159 @@
+{
+  "basis": "UTT D2 Windows package b1659a9dfb60f923b002a432f1ec5ad77d2ffb5fb2a4a9e50a4224b635db63bd",
+  "files": [
+    {
+      "baseline_path": "app/web/index.html",
+      "baseline_sha256": "24a6b639284263ba728b69f117122a0202bb1cf2868fbeb7800dd2c4f54ef639",
+      "candidate_path": "legacy-reference/app/web/index.html",
+      "candidate_sha256": "dac6040a9a287a90ea22f9f48d365402c6f155f7e5915269feb777a6e409a98a",
+      "change": "STATIC_TEMPLATE_AND_CSP"
+    },
+    {
+      "baseline_path": "app/web/style.css",
+      "baseline_sha256": "212e98cb8ff9a84ca989bb341a7d10276ff0d4f1d3890a04ac71d37e276d4b5d",
+      "candidate_path": "legacy-reference/app/web/style.css",
+      "candidate_sha256": "212e98cb8ff9a84ca989bb341a7d10276ff0d4f1d3890a04ac71d37e276d4b5d",
+      "change": "UNCHANGED"
+    },
+    {
+      "baseline_path": "app/web/app.mjs",
+      "baseline_sha256": "4574230676644068b11eb0ec1158240aa87bfe4dc0ef1f535119a7a968a127c4",
+      "candidate_path": "legacy-reference/app/web/app.mjs.reference.txt",
+      "candidate_sha256": "4574230676644068b11eb0ec1158240aa87bfe4dc0ef1f535119a7a968a127c4",
+      "change": "SOURCE_REFERENCE_NOT_LOADED"
+    },
+    {
+      "baseline_path": "app/web/gate-c/index.html",
+      "baseline_sha256": "df8e628d2b6319d4961851e6ad23dbd4fe7fd7cda2a6146ee2ee803434dd6710",
+      "candidate_path": "legacy-reference/app/web/gate-c/index.html",
+      "candidate_sha256": "15d6446d5b6801e01f36cf7d4907a9e0049194c5d1297c27c5d9c389e631d962",
+      "change": "STATIC_TEMPLATE_AND_CSP"
+    },
+    {
+      "baseline_path": "app/web/gate-c/gate.css",
+      "baseline_sha256": "c1584c01312393f2702bf56e68fc667f1ff4217d516cfb0dfcd48bcb3fccca05",
+      "candidate_path": "legacy-reference/app/web/gate-c/gate.css",
+      "candidate_sha256": "c1584c01312393f2702bf56e68fc667f1ff4217d516cfb0dfcd48bcb3fccca05",
+      "change": "UNCHANGED"
+    },
+    {
+      "baseline_path": "app/web/gate-c/gate.mjs",
+      "baseline_sha256": "80c450e2a89a5bd622469e87332c1e76dc04a236b8d560b55d2afe7a063a8c63",
+      "candidate_path": "legacy-reference/app/web/gate-c/gate.mjs.reference.txt",
+      "candidate_sha256": "18bb927c7b7f05b02ffec2cf84cd7547d696d746a1c6b46cf56b5ed44208281a",
+      "change": "REFERENCE_SIZE_AND_COUNT_REDACTED_NOT_LOADED"
+    },
+    {
+      "baseline_path": "app/gate_d0/web/index.html",
+      "baseline_sha256": "833ef763c36aa100dc0ee7533160cba61410df662f08ba77d03a33b55315f8e6",
+      "candidate_path": "legacy-reference/app/gate_d0/web/index.html",
+      "candidate_sha256": "cd94240e7e355f7e02b0575e6fc0830c934960cea19b9d4bf8a0231464ae4321",
+      "change": "STATIC_TEMPLATE_AND_CSP"
+    },
+    {
+      "baseline_path": "app/gate_d0/web/style.css",
+      "baseline_sha256": "9ca56895b84881437d254cd437ae97a39c449af81abc66ec24af9ff0b890f53a",
+      "candidate_path": "legacy-reference/app/gate_d0/web/style.css",
+      "candidate_sha256": "9ca56895b84881437d254cd437ae97a39c449af81abc66ec24af9ff0b890f53a",
+      "change": "UNCHANGED"
+    },
+    {
+      "baseline_path": "app/gate_d0/web/app.mjs",
+      "baseline_sha256": "0c5ff88784c8d560abfe36d6432fb7d530e801a01c13a5fc96ae1c5311a80215",
+      "candidate_path": "legacy-reference/app/gate_d0/web/app.mjs.reference.txt",
+      "candidate_sha256": "0c5ff88784c8d560abfe36d6432fb7d530e801a01c13a5fc96ae1c5311a80215",
+      "change": "SOURCE_REFERENCE_NOT_LOADED"
+    },
+    {
+      "baseline_path": "app/gate_d1/web/index.html",
+      "baseline_sha256": "69b8eaa0db7970bab86163cc6a190649abdbd7f75800eb350f30a0d58ba7f0ec",
+      "candidate_path": "legacy-reference/app/gate_d1/web/index.html",
+      "candidate_sha256": "70ef6d7900d26e4c1c83000f016318929ddcdf50ceb41f39805385344ec0671b",
+      "change": "STATIC_TEMPLATE_AND_CSP"
+    },
+    {
+      "baseline_path": "app/gate_d1/web/style.css",
+      "baseline_sha256": "9ca56895b84881437d254cd437ae97a39c449af81abc66ec24af9ff0b890f53a",
+      "candidate_path": "legacy-reference/app/gate_d1/web/style.css",
+      "candidate_sha256": "9ca56895b84881437d254cd437ae97a39c449af81abc66ec24af9ff0b890f53a",
+      "change": "UNCHANGED"
+    },
+    {
+      "baseline_path": "app/gate_d1/web/app.mjs",
+      "baseline_sha256": "5d6b3e4bcbb4ac30270126aebb5eb86465e0e4b080f861820c7135ce96fc32be",
+      "candidate_path": "legacy-reference/app/gate_d1/web/app.mjs.reference.txt",
+      "candidate_sha256": "5d6b3e4bcbb4ac30270126aebb5eb86465e0e4b080f861820c7135ce96fc32be",
+      "change": "SOURCE_REFERENCE_NOT_LOADED"
+    },
+    {
+      "baseline_path": "app/gate_d11/web/index.html",
+      "baseline_sha256": "dc18d69a058816632cd2ef8cfaa4fbd0546ede549e647191793ed440f9495cec",
+      "candidate_path": "legacy-reference/app/gate_d11/web/index.html",
+      "candidate_sha256": "21e7098ca4a60424601d587e08aafb25bb1628d666463c96dc5ce493013f8712",
+      "change": "STATIC_TEMPLATE_AND_CSP"
+    },
+    {
+      "baseline_path": "app/gate_d11/web/style.css",
+      "baseline_sha256": "9ca56895b84881437d254cd437ae97a39c449af81abc66ec24af9ff0b890f53a",
+      "candidate_path": "legacy-reference/app/gate_d11/web/style.css",
+      "candidate_sha256": "9ca56895b84881437d254cd437ae97a39c449af81abc66ec24af9ff0b890f53a",
+      "change": "UNCHANGED"
+    },
+    {
+      "baseline_path": "app/gate_d11/web/app.mjs",
+      "baseline_sha256": "102f340fc25cdaaf89cf4a0f36c668f29f49b891b9ba40e5c35c606ce2cd12a7",
+      "candidate_path": "legacy-reference/app/gate_d11/web/app.mjs.reference.txt",
+      "candidate_sha256": "102f340fc25cdaaf89cf4a0f36c668f29f49b891b9ba40e5c35c606ce2cd12a7",
+      "change": "SOURCE_REFERENCE_NOT_LOADED"
+    },
+    {
+      "baseline_path": "app/gate_d2/web/index.html",
+      "baseline_sha256": "fb8ba34e6109c6c00f0a68a84655f2e07b1a4f2ab67540cfe0b2ec78e994de0d",
+      "candidate_path": "legacy-reference/app/gate_d2/web/index.html",
+      "candidate_sha256": "549d363fa2332aec9d79c84b70ac4f71ea12e66d3f70d91fd17ae8963012fe2f",
+      "change": "STATIC_TEMPLATE_AND_CSP"
+    },
+    {
+      "baseline_path": "app/gate_d2/web/style.css",
+      "baseline_sha256": "9ca56895b84881437d254cd437ae97a39c449af81abc66ec24af9ff0b890f53a",
+      "candidate_path": "legacy-reference/app/gate_d2/web/style.css",
+      "candidate_sha256": "9ca56895b84881437d254cd437ae97a39c449af81abc66ec24af9ff0b890f53a",
+      "change": "UNCHANGED"
+    },
+    {
+      "baseline_path": "app/gate_d2/web/app.mjs",
+      "baseline_sha256": "197c03b86568fd4909c9b6ad0cf0610fa4c9425b21e9e4a5cd93436d92958922",
+      "candidate_path": "legacy-reference/app/gate_d2/web/app.mjs.reference.txt",
+      "candidate_sha256": "197c03b86568fd4909c9b6ad0cf0610fa4c9425b21e9e4a5cd93436d92958922",
+      "change": "SOURCE_REFERENCE_NOT_LOADED"
+    },
+    {
+      "baseline_path": "app/web/lib/readmodel-parser.mjs",
+      "baseline_sha256": "024868b0df33590d48fb320f9cddffdf3afcad153495a58c683395e08a714ef9",
+      "candidate_path": "safe_modules/readmodel/readmodel-parser.mjs",
+      "candidate_sha256": "024868b0df33590d48fb320f9cddffdf3afcad153495a58c683395e08a714ef9",
+      "change": "UNCHANGED_PURE_IN_MEMORY_MODULE"
+    },
+    {
+      "baseline_path": "app/web/lib/readmodel.mjs",
+      "baseline_sha256": "bdc356a6d40a1771b5aa774ce10f9c24e122633d8e10a49daaeb280d723a9721",
+      "candidate_path": "safe_modules/readmodel/readmodel.mjs",
+      "candidate_sha256": "bdc356a6d40a1771b5aa774ce10f9c24e122633d8e10a49daaeb280d723a9721",
+      "change": "UNCHANGED_PURE_IN_MEMORY_MODULE"
+    },
+    {
+      "baseline_path": "app/web/lib/readmodel-versions.mjs",
+      "baseline_sha256": "185f72130305cceae6e5dc9852e2099632e00a736af647aef4825b6c88a8fa23",
+      "candidate_path": "safe_modules/readmodel/readmodel-versions.mjs",
+      "candidate_sha256": "185f72130305cceae6e5dc9852e2099632e00a736af647aef4825b6c88a8fa23",
+      "change": "UNCHANGED_PURE_IN_MEMORY_MODULE"
+    },
+    {
+      "baseline_path": "app/web/lib/canonical-view.mjs",
+      "baseline_sha256": "3dbc5e6378b417503029130f9edde735c9633529035bf474362e9d739cefb641",
+      "candidate_path": "safe_modules/readmodel/canonical-view.mjs",
+      "candidate_sha256": "3dbc5e6378b417503029130f9edde735c9633529035bf474362e9d739cefb641",
+      "change": "UNCHANGED_PURE_IN_MEMORY_MODULE"
+    }
+  ]
+}
