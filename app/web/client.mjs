@@ -6,13 +6,43 @@ export function makeRequest(operation, values={}) {
 }
 export class ReadClient {
   constructor(fetcher=globalThis.fetch.bind(globalThis)) { this.fetcher=fetcher; this.dataset=null; this.scenario='normal'; this.sort='id_asc'; }
+  async fetchResponse(path, options) {
+    let response;
+    try { response=await this.fetcher(path,options); }
+    catch(error) {
+      if(error.name==='AbortError')throw error;
+      throw Object.assign(Error('읽기 서버에 연결할 수 없습니다.'),{code:'CONNECTION_UNAVAILABLE'});
+    }
+    if(!response.ok) {
+      // HTTP status is transport evidence, not a new read-contract error enum.
+      const code=response.status===401?'AUTHENTICATION_REQUIRED':response.status===403?'ACCESS_DENIED':
+        [502,503,504].includes(response.status)?'CONNECTION_UNAVAILABLE':'HTTP_ERROR';
+      throw Object.assign(Error('읽기 요청을 처리하지 못했습니다.'),{code,httpStatus:response.status});
+    }
+    return response;
+  }
+  async readMode(signal) {
+    const response=await this.fetchResponse('/api/mode',{signal});
+    let info;
+    try { info=await response.json(); }
+    catch(error) {
+      if(error.name==='AbortError')throw error;
+      throw Object.assign(Error('실행 모드 응답을 읽을 수 없습니다.'),{code:'INVALID_RESPONSE'});
+    }
+    if(!info||!['synthetic','readonly'].includes(info.mode))
+      throw Object.assign(Error('확인되지 않은 실행 모드입니다.'),{code:'INVALID_RESPONSE'});
+    return info;
+  }
   async read(operation, values={}, signal) {
     const request=Object.freeze(makeRequest(operation,{dataset_id:this.dataset?.dataset_id??null,snapshot_id:this.dataset?.snapshot_id??null,...values}));
-    const response=await this.fetcher('/api/read',{method:'POST',headers:{'Content-Type':'application/json'},
+    const response=await this.fetchResponse('/api/read',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({request,sort:this.sort,scenario:this.scenario}),signal});
-    if(!response.ok) throw Object.assign(Error('읽기 서버에 연결할 수 없습니다.'),{code:'CONNECTION_UNAVAILABLE'});
     let envelope;
-    try{envelope=await response.json();}catch{throw Object.assign(Error('읽기 응답이 올바른 JSON이 아닙니다.'),{code:'INVALID_RESPONSE'});}
+    try{envelope=await response.json();}
+    catch(error){
+      if(error.name==='AbortError')throw error;
+      throw Object.assign(Error('읽기 응답이 올바른 JSON이 아닙니다.'),{code:'INVALID_RESPONSE'});
+    }
     validateResponse(envelope,request,VERSION);
     if(envelope.status!=='OK') throw Object.assign(Error(envelope.error?.message??'읽기 실패'),{code:envelope.error?.code});
     return envelope;
