@@ -33,6 +33,18 @@ export class ReadClient {
       throw Object.assign(Error('확인되지 않은 실행 모드입니다.'),{code:'INVALID_RESPONSE'});
     return info;
   }
+  async readFeatures(signal) {
+    try {
+      const response=await this.fetchResponse('/api/features',{signal});
+      const value=await response.json();
+      const fields=['query','project','document_role','review_status','tag','source'];
+      const states=['SUPPORTED','CONDITIONAL','UNSUPPORTED','UNKNOWN'];
+      if(!value||typeof value!=='object'||Object.keys(value).length!==2||value.contract_version!=='UTT-READ-FEATURES/0.1.0'||
+        !value.filters||typeof value.filters!=='object'||Array.isArray(value.filters)||Object.keys(value.filters).length!==fields.length||
+        !fields.every(key=>Object.hasOwn(value.filters,key)&&states.includes(value.filters[key])))return null;
+      return value;
+    }catch(error){if(error.name==='AbortError')throw error;return null;}
+  }
   async read(operation, values={}, signal) {
     const request=Object.freeze(makeRequest(operation,{dataset_id:this.dataset?.dataset_id??null,snapshot_id:this.dataset?.snapshot_id??null,...values}));
     const response=await this.fetchResponse('/api/read',{method:'POST',headers:{'Content-Type':'application/json'},

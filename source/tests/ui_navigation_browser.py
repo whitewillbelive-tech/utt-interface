@@ -260,9 +260,15 @@ async def check_relation_targets(browser, base):
 async def check_readonly_boundary(browser, base, readonly):
     page = await browser.new_page()
     try:
-        # The server remains a fictional generator. Only the existing mode response
-        # is intercepted; no real readonly transport is created or accessed.
+        # The server remains a fictional generator. Mode and published feature
+        # support model an unconfirmed readonly provider; no real transport exists.
         await page.route('**/api/mode', lambda route: route.fulfill(json={'mode': 'readonly', 'simulation_namespace': None}))
+        await page.route('**/api/features', lambda route: route.fulfill(json={
+            'contract_version': 'UTT-READ-FEATURES/0.1.0',
+            'filters': {'query': 'UNKNOWN', 'project': 'UNKNOWN',
+                        'document_role': 'UNKNOWN', 'review_status': 'UNKNOWN',
+                        'tag': 'UNSUPPORTED', 'source': 'UNSUPPORTED'},
+        }))
         search_sorts = []
         search_filters = []
         async def descending_sort(route):

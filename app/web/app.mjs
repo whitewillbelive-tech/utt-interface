@@ -5,11 +5,14 @@ const button=(text,action,cls)=>{const n=el('button',text,cls);n.type='button';n
 const labels={UNREVIEWED:'미검토',HELD:'보류',EVIDENCE_REQUESTED:'근거 요청',CANCELLED:'취소',OBSERVED:'관측됨',CONFLICTING:'관측 충돌',NONE:'없음',DRAFT:'초안',CONFLICT:'충돌',NOT_APPROVED:'미승인',UNKNOWN:'미확인',AVAILABLE:'이용 가능',MISSING:'누락 확인',NOT_REQUESTED:'미요청',INACCESSIBLE:'접근 불가',USER_CONFIRMED:'사용자 확정',UNRESOLVED:'미해결'};
 const label=v=>v==null?'미확인':labels[v]??v;
 const client=new ReadClient(), listGate=new LatestRequest(), detailGate=new LatestRequest(), bootGate=new LatestRequest();
-let page=0,cursors=[null],nextCursor=null,projects=[],mode=null,capabilities=null,providerSort='id_asc',listOriginId=null,listScrollY=0,currentDetailId=null,timer;
+let page=0,cursors=[null],nextCursor=null,projects=[],mode=null,capabilities=null,features=null,providerSort='id_asc',listOriginId=null,listScrollY=0,currentDetailId=null,timer;
 const NS='utt.synthetic.session.v1';
 const sourceGates=new Set();
 function cancelSources(){for(const gate of sourceGates)gate.cancel();sourceGates.clear();}
 const supports=operation=>capabilities?.operations.includes(operation)===true;
+const filterState=name=>features?.filters[name]??'UNKNOWN';
+const filterSupported=name=>filterState(name)==='SUPPORTED';
+const filterLabel=name=>({SUPPORTED:'지원',CONDITIONAL:name==='query'?'조건부 · 제공자 확인 필요':'조건부 · 현재 비활성',UNSUPPORTED:'미지원',UNKNOWN:'지원 미확인'})[filterState(name)];
 const synthetic=()=>mode==='synthetic'&&client.dataset?.dataset_kind==='SYNTHETIC';
 const pageSize=()=>Math.min(3,capabilities?.max_page_size??3);
 function notify(text,kind=''){ $('notice').textContent=text;$('notice').className=kind; }
@@ -54,19 +57,19 @@ function projectRelation(relation,anchor){
 function updateControls(){
  const canSearch=supports('search');
  for(const n of $('filters').elements)n.disabled=!canSearch;
- $('project').disabled=!canSearch||projects.length===0;
- // Until the shared filter-support contract confirms otherwise, only the
- // existing synthetic provider has verified role/review filter semantics.
- $('role').disabled=!canSearch||!synthetic();
- $('review').disabled=!canSearch||!synthetic();
+ $('search').disabled=!canSearch||filterState('query')==='UNSUPPORTED';
+ $('project').disabled=!canSearch||projects.length===0||!filterSupported('project');
+ $('role').disabled=!canSearch||!filterSupported('document_role');
+ $('review').disabled=!canSearch||!filterSupported('review_status');
+ $('filter-support').textContent=`검색어: ${filterLabel('query')} · 프로젝트: ${filterLabel('project')} · 자료 유형: ${filterLabel('document_role')} · 검토 상태: ${filterLabel('review_status')}`;
  $('sort').disabled=!canSearch||!synthetic();
- for(const n of $('projects').querySelectorAll('button'))n.disabled=!canSearch;
- for(const n of $('components').querySelectorAll('button'))n.disabled=!canSearch;
+ for(const n of $('projects').querySelectorAll('button'))n.disabled=!canSearch||!filterSupported('project');
+ for(const n of $('components').querySelectorAll('button'))n.disabled=!canSearch||!filterSupported('project');
 }
 function hideDetail(){cancelSources();detailGate.cancel();currentDetailId=null;$('detail').hidden=true;$('detail').replaceChildren();$('list-view').hidden=false;}
 function invalidate(){clearTimeout(timer);listGate.cancel();hideDetail();nextCursor=null;$('results').replaceChildren();$('next').disabled=true;$('prev').disabled=true;}
 async function bootstrap(){
- invalidate();const token=bootGate.begin();client.dataset=null;capabilities=null;mode=null;projects=[];client.scenario='normal';
+ invalidate();const token=bootGate.begin();client.dataset=null;capabilities=null;features=null;mode=null;projects=[];client.scenario='normal';
  $('scenario').value='normal';$('synthetic-scenarios').hidden=true;$('dataset-kind').textContent='미연결';
  $('project').replaceChildren(new Option('전체 프로젝트 · 미분류 포함',''));
  $('projects').replaceChildren();$('components').replaceChildren();$('dataset').textContent='연결 확인 중…';
@@ -78,17 +81,21 @@ async function bootstrap(){
   const cap=await client.read('capabilities',{},token.signal);if(!token.current())return;
   if(mode==='synthetic'&&cap.snapshot.dataset_kind!=='SYNTHETIC')throw Object.assign(Error(),{code:'INVALID_RESPONSE'});
   client.dataset=cap.snapshot;capabilities=cap.result;
+  const featureResponse=await client.readFeatures(token.signal);if(!token.current())return;
+  features=featureResponse;
+  if(filterState('query')==='UNSUPPORTED')$('search').value='';
+  if(!filterSupported('project'))$('project').value='';
   $('mode').textContent=synthetic()?'합성 개발 자료 · 운영 연결 없음':'읽기 공급자 응답 확인 · 운영 승인 없음';
   $('dataset-kind').textContent=synthetic()?'SYNTHETIC ONLY':'읽기 전용';
   $('connection-state').textContent='공급자: 읽기 응답 확인 · 실제 정본: 미확인';
   $('synthetic-scenarios').hidden=!synthetic();
   $('dataset').textContent=`${cap.snapshot.dataset_id} / ${cap.snapshot.dataset_kind} / 기준 ${cap.snapshot.snapshot_id}`;
-  const savedRole=$('role').value;
+  const savedRole=filterSupported('document_role')?$('role').value:'';
   $('role').replaceChildren(new Option('모든 유형',''));
   if(synthetic())$('role').append(new Option('합성 노트','SYNTHETIC_NOTE'));
   if(savedRole){if(![...$('role').options].some(o=>o.value===savedRole))$('role').append(new Option(savedRole,savedRole));$('role').value=savedRole;}
-  if(!synthetic()){$('role').value='';$('review').value='';}
-  $('filter-support').textContent=synthetic()?'자료 유형·검토 상태: 합성 제공자 지원':'자료 유형·검토 상태: 지원 미확인 · 요청하지 않습니다.';
+  if(!filterSupported('document_role'))$('role').value='';
+  if(!filterSupported('review_status'))$('review').value='';
   if(!synthetic()){
    providerSort=cap.result.sort_order.includes('record_id:desc')?'id_desc':'id_asc';
    $('sort').value=providerSort;
@@ -132,6 +139,7 @@ async function bootstrap(){
  }catch(error){if(token.current()&&error.name!=='AbortError'){$('connection-state').textContent='공급자: 읽기 연결 미확인 · 실제 정본: 미확인';failure(error);}}
 }
 function selectProject(id){
+ if(!filterSupported('project')){notify(`프로젝트 필터: ${filterLabel('project')} · 검색 조건을 바꾸지 않았습니다.`,'warning');return;}
  if(id!==''&&!projects.some(p=>p.project_id===id)){notify('연결 대상 프로젝트 미확인 · 검색 조건을 바꾸지 않았습니다.','warning');return;}
  $('project').value=id;invalidate();search(true);
 }
@@ -143,7 +151,7 @@ async function search(reset=false){
  if(!synthetic())$('sort').value=providerSort;
  client.sort=$('sort').value;
  try{
-  const d=await client.read('search',{query:$('search').value,project_id:$('project').value||null,document_role:synthetic()?$('role').value||null:null,review_status:synthetic()?$('review').value||null:null,cursor:cursors[page],page_size:pageSize()},token.signal);
+  const d=await client.read('search',{query:filterState('query')==='UNSUPPORTED'?null:$('search').value,project_id:filterSupported('project')?$('project').value||null:null,document_role:filterSupported('document_role')?$('role').value||null:null,review_status:filterSupported('review_status')?$('review').value||null:null,cursor:cursors[page],page_size:pageSize()},token.signal);
   if(!token.current())return;
   nextCursor=d.result.page.next_cursor;$('page-number').textContent=`${page+1} 페이지`;$('count').textContent=`이 페이지 ${d.result.records.length}건 · 한 번에 ${d.result.page.page_size}건`;
   for(const r of d.result.records){
@@ -156,7 +164,9 @@ async function search(reset=false){
    card.append(links,el('p',`출처: ${label(r.source_status)} · 본문: 상세에서 요청`,'muted'));$('results').append(card);
   }
   if(!d.result.records.length)$('results').append(el('p','조건에 맞는 기록이 없습니다. 연결 오류와는 다릅니다.','empty'));
-  $('prev').disabled=page===0;$('next').disabled=!nextCursor;notify(`${synthetic()?'합성 자료':'읽기 자료'} 조회 완료 · 실제 정본 상태는 미확인`);
+  $('prev').disabled=page===0;$('next').disabled=!nextCursor;
+  const queryNotice=$('search').value&&!filterSupported('query')?` · 검색어 ${filterLabel('query')} (제공자 응답 기준)`:'';
+  notify(`${synthetic()?'합성 자료':'읽기 자료'} 조회 완료 · 실제 정본 상태는 미확인${queryNotice}`);
  }catch(error){if(token.current()&&error.name!=='AbortError')failure(error);}
  finally{if(token.current())$('results').setAttribute('aria-busy','false');}
 }
@@ -178,13 +188,13 @@ async function showDetail(id){
   if(!r.project_relations.length)box.append(el('p',r.project_relations_status==='AVAILABLE'?`미분류 · 관계 상태: ${label(r.project_relations_status)}`:`프로젝트 관계: ${label(r.project_relations_status)}`));
   for(const l of r.project_relations){
    const target=projectRelation(l,r.record_id);
-   if(target.id&&supports('search'))box.append(button(`${target.text} · ${label(l.assertion_status)}`,()=>selectProject(target.id),'text-link'));
-   else box.append(el('p',`${target.text} · ${label(l.assertion_status)}`,'muted'));
+   if(target.id&&supports('search')&&filterSupported('project'))box.append(button(`${target.text} · ${label(l.assertion_status)}`,()=>selectProject(target.id),'text-link'));
+   else box.append(el('p',`${target.text} · ${label(l.assertion_status)}${target.id?` · 프로젝트 필터 ${filterLabel('project')}`:''}`,'muted'));
   }
   for(const project of d.result.related_projects){
    if(r.project_relations.some(l=>endpoint(l,r.record_id)?.dataset===client.dataset.dataset_id&&endpoint(l,r.record_id)?.id===project.project_id))continue;
-   if(supports('search'))box.append(button(`상세 응답 관련 프로젝트: ${project.name}`,()=>selectProject(project.project_id),'text-link'));
-   else box.append(el('p',`상세 응답 관련 프로젝트: ${project.name}`));
+   if(supports('search')&&filterSupported('project'))box.append(button(`상세 응답 관련 프로젝트: ${project.name}`,()=>selectProject(project.project_id),'text-link'));
+   else box.append(el('p',`상세 응답 관련 프로젝트: ${project.name} · 프로젝트 필터 ${filterLabel('project')}`));
   }
   box.append(el('p','관측 관계·사용자 확정 소속·제안·정본 승인은 독립 상태입니다.'));
   box.append(el('h3','보존 본문'),el('p',`본문 상태: ${label(r.content_availability)}`,'muted'));
