@@ -130,6 +130,7 @@ class D0ClientTests(unittest.TestCase):
         self.client.records(q=None, tag=None, project=None, source=None)
         self.client.records(q='', tag='', project='', source='')
         self.client.records(q=' \t\n', tag='  ', project='\u3000', source=' S ')
+        self.client.records(q='가상\\%_자료', tag='NATIVE_TAG', source='source%_')
         queries = [query for path, query, _ in self.requests if path.endswith('/records')]
         self.assertNotIn('q', queries[0])
         self.assertNotIn('tag', queries[0])
@@ -138,6 +139,9 @@ class D0ClientTests(unittest.TestCase):
         self.assertEqual(queries[2]['q'], [' \t\n'])
         self.assertEqual(queries[2]['project'], ['\u3000'])
         self.assertEqual(queries[2]['source'], [' S '])
+        self.assertEqual(queries[3]['q'], ['가상\\%_자료'])
+        self.assertEqual(queries[3]['tag'], ['NATIVE_TAG'])
+        self.assertEqual(queries[3]['source'], ['source%_'])
 
     def test_unconfirmed_role_review_and_bad_native_arguments_fail_before_http(self):
         for values in ({'document_role': 'NOTE'}, {'review_status': 'HELD'},
