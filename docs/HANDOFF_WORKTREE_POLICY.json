@@ -23,7 +23,11 @@
     "tests/test_transport.py",
     "tests/test_backend_integration.py",
     "source/tests/ui_transport.test.mjs",
-    "source/tests/ui_navigation_browser.py"
+    "source/tests/ui_navigation_browser.py",
+    "contracts/utt-source-read.schema.json",
+    "tests/test_source_read.py",
+    "tests/test_snapshot_provider.py",
+    "tests/test_source_server.py"
   ],
   "development_prefixes": [
     "app/",

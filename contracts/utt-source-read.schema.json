@@ -1,0 +1,466 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:utt:source-read:0.1.0",
+  "title": "UTT-SOURCE-READ/0.1.0 independent source read extension",
+  "$comment": "UTT-ACCESS-READ/0.1.0 remains unchanged. source and location definitions are frozen copies of that schema. See app/source_read.py for identity/hash/range checks, exact supported locator targets and non-sensitive verification reasons. No source path, address, credential or arbitrary locator payload is accepted.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/request"
+    },
+    {
+      "$ref": "#/$defs/response"
+    }
+  ],
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "contract_version": {
+          "const": "UTT-SOURCE-READ/0.1.0"
+        },
+        "dataset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "snapshot_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "record_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_version": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "contract_version",
+        "dataset_id",
+        "snapshot_id",
+        "record_id",
+        "source_id",
+        "source_version"
+      ],
+      "additionalProperties": false
+    },
+    "response": {
+      "type": "object",
+      "properties": {
+        "contract_version": {
+          "const": "UTT-SOURCE-READ/0.1.0"
+        },
+        "status": {
+          "enum": [
+            "OK",
+            "ERROR"
+          ]
+        },
+        "result": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/result"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/error"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "contract_version",
+        "status",
+        "result",
+        "error"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "OK"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "$ref": "#/$defs/result"
+              },
+              "error": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "result": {
+                "type": "null"
+              },
+              "error": {
+                "$ref": "#/$defs/error"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "result": {
+      "type": "object",
+      "properties": {
+        "dataset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "snapshot_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "record_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "content": {
+          "$ref": "#/$defs/content"
+        },
+        "locator_verification": {
+          "$ref": "#/$defs/locator_verification"
+        }
+      },
+      "required": [
+        "dataset_id",
+        "snapshot_id",
+        "record_id",
+        "source_id",
+        "source_version",
+        "source",
+        "content",
+        "locator_verification"
+      ],
+      "additionalProperties": false
+    },
+    "content": {
+      "type": "object",
+      "properties": {
+        "availability": {
+          "enum": [
+            "AVAILABLE",
+            "MISSING",
+            "UNKNOWN",
+            "INACCESSIBLE",
+            "NOT_SUPPORTED"
+          ]
+        },
+        "target_kind": {
+          "enum": [
+            "SOURCE_BODY",
+            "RECORD_BODY",
+            null
+          ]
+        },
+        "target_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "target_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "locator_target_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      },
+      "required": [
+        "availability",
+        "target_kind",
+        "target_id",
+        "target_version",
+        "text",
+        "text_sha256",
+        "locator_target_version"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "availability": {
+                "const": "AVAILABLE"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "target_kind": {
+                "enum": [
+                  "SOURCE_BODY",
+                  "RECORD_BODY"
+                ]
+              },
+              "target_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "target_version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "text": {
+                "type": "string"
+              },
+              "text_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "text": {
+                "type": "null"
+              },
+              "text_sha256": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "locator_verification": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "VERIFIED",
+            "UNVERIFIED",
+            "NOT_SUPPORTED",
+            "MISMATCH",
+            "NOT_AVAILABLE"
+          ]
+        },
+        "reason": {
+          "enum": [
+            "HASH_AND_RANGE_MATCH",
+            "CONTENT_UNAVAILABLE",
+            "LOCATION_NOT_PROVIDED",
+            "TARGET_NOT_SUPPORTED",
+            "UNIT_NOT_SUPPORTED",
+            "HASH_NOT_PROVIDED",
+            "TARGET_HASH_MISMATCH",
+            "INVALID_RANGE",
+            "FRAGMENT_HASH_MISMATCH",
+            "TARGET_VERSION_UNCONFIRMED",
+            "TARGET_VERSION_MISMATCH"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "availability": {
+          "enum": [
+            "AVAILABLE",
+            "MISSING",
+            "UNKNOWN",
+            "INACCESSIBLE"
+          ]
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "content_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "location": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/location"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "verification": {
+          "enum": [
+            "VERIFIED",
+            "UNVERIFIED",
+            "UNKNOWN"
+          ]
+        }
+      },
+      "required": [
+        "source_id",
+        "dataset_id",
+        "availability",
+        "version",
+        "content_sha256",
+        "location",
+        "verification"
+      ],
+      "additionalProperties": false
+    },
+    "location": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "unit": {
+          "enum": [
+            "unicode_code_point",
+            "UTF-16",
+            "byte"
+          ]
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "boundary": {
+          "const": "half_open"
+        },
+        "target_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "fragment_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "verification": {
+          "enum": [
+            "VERIFIED",
+            "UNVERIFIED",
+            "UNKNOWN"
+          ]
+        }
+      },
+      "required": [
+        "target",
+        "unit",
+        "start",
+        "end",
+        "boundary",
+        "target_sha256",
+        "fragment_sha256",
+        "verification"
+      ],
+      "additionalProperties": false
+    },
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "enum": [
+            "ITEM_NOT_FOUND",
+            "SOURCE_MISSING",
+            "CONNECTION_UNAVAILABLE",
+            "VERSION_MISMATCH",
+            "UNSUPPORTED_CONTRACT",
+            "INVALID_REQUEST",
+            "INTERNAL_ERROR",
+            "NOT_SUPPORTED"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
