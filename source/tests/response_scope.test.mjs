@@ -60,17 +60,18 @@ test('detail id mismatch and malformed envelopes have distinct local errors',asy
  await rejected(clientFor(d).read('search'),'INVALID_RESPONSE');
 });
 test('valid old-dataset reply is validated against captured request then discarded by generation',async()=>{
- let resolve;const gate=new LatestRequest(),old=gate.begin();
- const client=new ReadClient(async()=>({ok:true,json:()=>new Promise(r=>resolve=r)}));client.dataset=clone(scope);
+ let resolve,entered;const parsing=new Promise(r=>entered=r);const gate=new LatestRequest(),old=gate.begin();
+ const client=new ReadClient(async()=>({ok:true,json:()=>new Promise(r=>{resolve=r;entered();})}));client.dataset=clone(scope);
  const pending=client.read('detail',{record_id:examples.detail.result.record.record_id},old.signal);
- await Promise.resolve();
+ await parsing;
  client.dataset={...scope,dataset_id:'synthetic-next',snapshot_id:'next'};const latest=gate.begin();
  resolve(clone(examples.detail));const response=await pending;
  assert.equal(response.snapshot.dataset_id,scope.dataset_id);assert.equal(old.current(),false);assert.equal(latest.current(),true);
 });
 test('a late reply matching the new selection is rejected if the old request asked for another dataset',async()=>{
- let resolve;const client=new ReadClient(async()=>({ok:true,json:()=>new Promise(r=>resolve=r)}));client.dataset=clone(scope);
- const pending=client.read('detail',{record_id:examples.detail.result.record.record_id});await Promise.resolve();
+ let resolve,entered;const parsing=new Promise(r=>entered=r);
+ const client=new ReadClient(async()=>({ok:true,json:()=>new Promise(r=>{resolve=r;entered();})}));client.dataset=clone(scope);
+ const pending=client.read('detail',{record_id:examples.detail.result.record.record_id});await parsing;
  const d=clone(examples.detail);d.snapshot.dataset_id='synthetic-next';client.dataset={...scope,dataset_id:'synthetic-next'};
  resolve(d);await rejected(pending,'RESPONSE_SCOPE_MISMATCH');
 });
