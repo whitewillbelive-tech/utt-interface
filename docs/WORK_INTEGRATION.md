@@ -8,7 +8,7 @@
 
 | 담당 | 단독 변경 범위 | 현재 접합 상태 |
 |---|---|---|
-| 07 Work Chat | 비민감 원천 의미·projection 계약, 승인 데이터 환경의 설정·실자료 대조 | 새 원천 계약과 같은 코드 커밋의 실제 실행 결과는 아직 수신하지 않음 |
+| 07 Work Chat | 비민감 원천 의미·projection 계약, 승인 데이터 환경의 설정·실자료 대조 | 관리 Chat이 전달한 07 원천 매핑을 반영. 같은 코드 커밋의 실제 실행 결과는 아직 수신하지 않음 |
 | 08 이 Chat | provider/server/transport·공용 스키마·백엔드 시험·루트 지침·최종 통합 | 명시적 HTTPS 읽기 transport, 인증 주입, 응답 검증, 오류 처리 구현. 실제 접속은 미수행 |
 | 09 Codex Chat | `app/web/`, UI 전용 시험, 별도 UI 브랜치/PR | 위 UI 후속 커밋의 6개 파일을 직접 검토하고 PR #1 병합. UI 소스 직접 수정 없음 |
 
@@ -103,7 +103,7 @@ python3 -m app.server --mode readonly --connect-env --port 8765
 
 | 원천 의미 | 현재 구현·대응 | 미확정 및 다음 담당 |
 |---|---|---|
-| D0 text·tag·project·source 필터. 빈/공백은 무필터. 초안은 null·빈 문자열을 구별 | 기존 0.1 요청은 각각 전달하고 조용히 변환하지 않는다. 별도 정규화 snapshot 제공자의 검색 정책과 미지원 필터는 아래에 명시한다. | 07: 실제 검색 대상·정규화·tag/source 대응 및 role/review 필드 매핑. 09: 지원되지 않은 필터는 제공하지 않음. |
+| D0 text·tag·project·source 필터. 누락·빈 q는 무필터이나 공백만 있는 q는 그대로 LIKE 검색. 초안은 null·빈 문자열을 구별 | 기존 0.1 요청은 각각 전달하고 조용히 변환하지 않는다. 별도 정규화 snapshot 제공자의 검색 정책과 미지원 필터는 아래에 명시한다. | 07: D0 handler에는 role/review가 없음을 확인. 나머지 projection·대상 범위를 추가 확인. 09: 지원되지 않은 필터는 제공하지 않음. |
 | D0 limit/offset은 불변 snapshot이 아님 | 원천 provider에 snapshot과 모든 질의 조건에 결속된 cursor 책임이 있다. 기존 응답 검증의 페이지 내부 검사와 별개다. | 07: 원천 변경·재시작·동시 갱신 때 불변성/중복/누락 검증. |
 | 원천 문자열 비교·관계 ID 안정성 | 기존 검색 dataset asc + record ID asc/desc, 혼합 item kind/dataset/item ID asc를 유지한다. 조회 투영의 ID는 원천에서 제공한 값을 사용한다. | 07: 원천 ID의 dataset 범위·안정성, tie-breaker·문자열 순서 확인. |
 | 관측·후보·확정 관계 및 evidence, D0 lineage | assertion 상태·양끝 dataset·evidence는 받은 그대로 유지한다. lineage/후보를 결정 사건으로 바꾸지 않는다. 미확인 history를 AVAILABLE 빈 배열로 채우지 않는다. | 07: endpoint 유형과 evidence 식별 범위, 실제 원장 읽기 지원/권한 확인. |
@@ -111,7 +111,7 @@ python3 -m app.server --mode readonly --connect-env --port 8765
 | B 저장 본문·원출처·좌표 | 원천이 제공한 대상과 버전·해시·단위를 분리한다. B 저장 본문 검증을 Recovery 원출처 검증으로 승격하지 않는다. | 07: source identity/version, 대상·본문 접근·인코딩·좌표별 비민감 매핑. |
 | 대형 기록 | 기존 HTTPS transport 수신 제한 기본 8 MiB, 설정 범위 1–64 MiB. 제한 초과는 실패이며 잘린 성공이나 빈 본문이 아니다. | 07: 실제 필요성과 안전한 분할 규격. 우선 가능한 단일 기록 읽기를 진행한다. |
 
-D0 참조 화면에 있는 검색/상세 응답 외형은 실제 파일·DB 스키마가 아니다. 07에 필요한 것은 승인된 실행환경의 **기존 제공 프로그램 존재와 비민감 호출 규격, D0 저장 형식·필드/NULL/ID/상태/필터 매핑, source/version/대상/좌표 매핑**이다. 실제 자료·경로·주소·키·원본 로그는 보내지 않는다. 07은 별도 Chat이므로 이 문서의 항목을 실제로 받았거나 작업을 수행했다고 가정하지 않는다.
+D0 참조 화면에 있는 검색/상세 응답 외형은 실제 파일·DB 스키마가 아니다. 관리 Chat이 07 계약에서 기존 D0 루프백 제공 프로그램의 존재를 확인해 전달했다. 07에 필요한 것은 승인된 실행환경의 **불변 snapshot 증거, 응답 필드/NULL/ID/상태 매핑, source/version/대상/좌표 매핑**이다. 실제 자료·경로·주소·키·원본 로그는 보내지 않는다. 07은 별도 Chat이므로 이 문서의 항목을 실제로 받았거나 작업을 수행했다고 가정하지 않는다.
 
 ### 출처 읽기 확장과 09 작업 조건
 
@@ -146,3 +146,42 @@ D0 참조 화면에 있는 검색/상세 응답 외형은 실제 파일·DB 스�
 09의 요청·응답 구현 기준과 07에 전달할 실행 코드 기준은 `29bf52ee937896ef958dd55a3d9935cae79c1f96`이다. 이 커밋에는 이 절의 상태 문서만 빠져 있으며 provider/server/스키마/시험은 이후 상태 문서 커밋과 동일하다. 07은 승인 환경에서 이 정확한 코드 SHA를 확인해 실행하고, 실행환경 식별·버전과 각 단계 PASS/FAIL/NOT_RUN/NOT_SUPPORTED만 반환한다. 메타데이터, 별도 출처 본문 열기, 위치 검증을 따로 보고한다. 07의 실자료 시험 결과는 아직 받지 않았다. 09의 새 UI 브랜치·PR도 아직 제출되지 않았다.
 
 합성 검증 `20261104T163049Z-d04c9719`: 11단계 PASS. Python 74개, Node 23개, 기존 전체 스키마 검증 61건, 원형 38개, 기존 Chromium 및 09 기존 UI의 Chromium 8개 묶음이 통과했다. 새 파일 제공자를 직접 사용하는 합성 파일→같은 프로세스 서버→검색·두 페이지·상세→별도 출처 본문 흐름, cursor 결속·재시작·파일 변경, 미지원 필터, 출처 대상/버전/해시/좌표 및 오류를 확인했다. 출처 확장의 독립 스키마·의미 시험도 포함한다. 실제 D0 호환·실자료·운영 접속의 증거는 아니다.
+
+## 2026-11-05 — Work 후속 매핑 정정
+
+관리 Chat이 `UTT_DATA_CONTRACT_v1.json`의 `work_mapping_update_2026_11_05`를 읽고 아래 비민감 내용을 전달했다. 08은 Library 링크에서 로그인 화면만 보았고 파일 원문을 직접 읽지 못했다. 이 결과는 관리 Chat이 전달한 근거다. 07은 기존 D0 루프백 HTTP 읽기 프로그램의 존재와 고정 자료 검사·offset 페이지를 확인했다. 해당 세션이나 offset은 `UTT-ACCESS-READ/0.1.0`의 불변 snapshot/cursor를 증명하지 않는다. 07이 이 절을 이미 받거나 같은 코드를 실행했다고 가정하지 않는다.
+
+- D0 `q`는 제목·본문·record ID의 SQLite LIKE 검색이고 역슬래시·퍼센트·밑줄을 이스케이프한다. 누락/빈 q만 무필터다. **공백만 있는 q는 trim하지 않고 LIKE 조건으로 사용한다.** Unicode 정규화·casefold는 확인되지 않았다. 정규화 snapshot 제공자의 NFKC+casefold·공백 정책은 이 D0 동작과 다르다.
+- `tag`는 태그 일치, `project`는 프로젝트 ID 일치, `source`는 source ID 일치 또는 source 이름 부분 검색이다. 독립 필터는 함께 적용된다. D0 handler에는 document_role·review_status 필터가 없으므로 tag/category/review_state를 임의로 대응하지 않는다. 기존 `priority/title/id/status` 정렬과 초안 ID 정렬 및 아직 미확인인 Unicode 비교를 구분한다.
+- 기존 프로젝트 관계 테이블에는 독립 영구 relation ID가 없다. ID를 만들어 영구성을 주장하지 않는다. null을 빈 문자열로 만든 항목은 원래 detail을 참조해야 한다. 하나의 source에 여러 evidence·locator·검증 이력이 있으면 모두 원형과 연결해 보존하며 첫 근거만 선택하거나 임의 병합하지 않는다.
+- 기존 원장 투영·원출처 본문/좌표·승인 실행환경과 개발 도구 접근 차단은 미확인이고 실제 사용자 흐름은 전부 NOT_RUN이다. B 저장 본문에서 확인한 좌표를 Recovery 원출처 좌표로 취급하지 않는다.
+
+07에 필요한 비민감 확인은 (1) 현재 설치된 D0 프로그램이 인계 참조의 세션·records/detail 응답과 같은지, (2) 고정 자료 검사가 대상 전체와 요청 전후 갱신·교체를 어떻게 감지하며 불변 snapshot을 어떻게 입증하는지, (3) detail의 필드·NULL·record/project/source/evidence 식별·다중 locator 대응과 허용 오류 의미, (4) 관계 영구 ID가 없을 때 지원 가능한 안정적 조회 범위, (5) source 본문·대상 버전·인코딩·좌표 및 승인 환경의 개발 도구 접근 차단 여부다. 실제 자료·주소·경로·키·원본 로그는 요청하지 않는다.
+
+### 필터 지원 표기 — 독립 계약
+
+기존 `UTT-ACCESS-READ/0.1.0` 스키마·요청 필드를 바꾸지 않고 같은 origin의 `GET /api/features`가 `UTT-READ-FEATURES/0.1.0`을 반환한다. 응답은 `{contract_version,filters}`이고 filters의 `query`, `project`, `document_role`, `review_status`, `tag`, `source`는 각각 `SUPPORTED`, `CONDITIONAL`, `UNSUPPORTED`, `UNKNOWN` 중 하나다. 이 표기는 코드 기능이지 연결 성공이나 원천 권한 확인이 아니다. tag/source는 기존 0.1 요청에 해당 필드가 없으므로 D0에 별도 필터가 있더라도 이 경로에서는 UNSUPPORTED다. 임의 callback이나 HTTPS 원격 공급자는 query/project/role/review가 UNKNOWN이다.
+
+정규화 snapshot 제공자의 합성 응답 예:
+
+```json
+{"contract_version":"UTT-READ-FEATURES/0.1.0","filters":{"query":"SUPPORTED","project":"CONDITIONAL","document_role":"UNSUPPORTED","review_status":"UNSUPPORTED","tag":"UNSUPPORTED","source":"UNSUPPORTED"}}
+```
+
+기존 합성 공급자는 query/project/document_role/review_status가 SUPPORTED이고 tag/source는 UNSUPPORTED다. 미연결·미확인 원격의 예는 query/project/document_role/review_status가 UNKNOWN이고 tag/source는 UNSUPPORTED다. 자동 fallback은 없다. `CONDITIONAL` project는 모든 원천 관계가 필요한 완전성 조건을 만족해야 하며, 현재 per-dataset 사전 확인 수단은 없다. 09는 document_role·review_status가 SUPPORTED일 때만 해당 선택을 활성화한다. UNSUPPORTED는 비활성화하고 UNKNOWN은 미확인으로 표시한다. CONDITIONAL project는 성공을 가정하지 말고 현재는 비활성화한다. query가 UNKNOWN이어도 검색어 없는 목록 읽기를 막지 않으며, 사용자 검색 시도는 지원 미확인임을 표시하고 제공자의 명시적 성공·실패를 따른다. 09가 별도의 정식 조건 표현을 제안하면 08과 계약을 갱신한다. `/api/features`를 읽을 수 없거나 버전·형식이 맞지 않으면 미확인으로 처리한다. 필터 UI만 허용된 범위에서 수정하고 기존 `/api/source` UI 제출과 함께 별도 브랜치/PR로 08에 인계한다.
+
+### 기존 D0 루프백 호출 경계
+
+`app/d0_adapter.py`의 `D0Client`는 승인 환경에서 명시적으로 지정된 같은 호스트의 literal `127.0.0.1` HTTP endpoint에 한해 인계 참조의 session·records·detail·summary·filters GET을 호출한다. 지연 세션 취득과 `X-UTT-D0-Session`은 서버측 메모리에만 유지하며 redirect·프록시·재시도·export·쓰기·탐색·캐시는 하지 않는다. 이 별도 루프백 경계는 기존 HTTPS transport의 TLS 검증을 완화하지 않는다. 원천 응답의 모든 evidence·locator·필드·NULL은 원형 JSON으로 보존하고 오류에 주소·질의·본문·세션을 노출하지 않는다. 보존된 응답은 승인 환경을 벗어나거나 로그/GitHub로 전송하면 안 된다.
+
+`records`는 D0의 q/tag/project/source/sort/offset/limit을 그대로 전송하며 null을 생략하고 빈 문자열과 공백을 서로 바꾸지 않는다. 기존 D0 서버가 LIKE 이스케이프·검색·정렬을 수행하므로 중복으로 변환하지 않는다. `document_role`/`review_status`는 거부한다. 상세 조회는 원형을 읽으며 임의 관계 ID, cursor, 정본 상태, 승인 사건, 출처 본문을 만들지 않는다.
+
+**아직 UI의 실제 D0 읽기 제공자는 아니다.** 기존 offset에 불변 snapshot 증거가 없고 프로젝트 관계의 영구 ID·상세 투영/NULL/다중 evidence 의미가 확인되지 않아 `D0Client.read()`는 네트워크 호출 없이 `UNSUPPORTED_CONTRACT`를 반환한다. 따라서 위 클라이언트의 합성 D0 서버 검사는 기존 프로그램과의 실제 접속이나 검색→목록→상세의 운영 접합을 뜻하지 않는다. 07이 위 질문의 비민감 답과 같은 코드 커밋의 실행 결과를 제공하면, 08이 현재 공급자를 재사용해 충족 가능한 부분을 투영하고 충족할 수 없는 기능은 명시적으로 미지원으로 유지한다.
+
+### 09·07 전달 기준과 검증
+
+필터 계약·D0 루프백 클라이언트·UTF-16 경계 수정을 포함한 코드 기준 커밋은 `7ca090812f343d197aeba979261213f8c370362d`다. 09는 이 커밋을 포함하는 최신 main을 기준으로 기존 출처 UI에 더해 위 `/api/features` 조건을 반영한다. 09는 app/web과 UI 전용 시험만 별도 브랜치에서 수정하고 PR에 기준 SHA·필터 상태별 시험과 출처 조회 결과를 명시한다. 08이 PR을 직접 읽고 검토·통합한다. 현재 새 09 브랜치나 PR은 제출되지 않았다.
+
+07은 접근 분리된 승인 환경에서 동일 코드 SHA를 확인하고, 위 D0 호출 경계와 필요한 불변성·필드 매핑에 대해 비민감 결과만 제공한다. 실제 연결이나 UI 조회 성공을 가정하지 않는다. 기존 프로그램의 native 형식 호출을 시험할 때도 원문·실제 ID·요청·응답·경로·주소·세션·원본 로그를 개발 환경이나 GitHub로 반환하지 않는다.
+
+이번 합성 검증은 변경된 D0·출처·필터·서버 경계와 인계 무결성 55개 시험 PASS다. 합성 loopback D0 서버에서 세션, 조건을 유지한 검색, 두 offset 페이지, 원형 상세를 실제 `D0Client`로 읽었고, q의 null/빈/공백, 필터 병용·역슬래시/퍼센트/밑줄 전달, 오류·redirect·응답 제한을 확인했다. 별도 출처 검증에서 `앞 🧭 동쪽\n끝`의 시작=끝=3은 MISMATCH/INVALID_RANGE이며 정상 UTF-16 경계의 빈 구간과 빈 본문은 유지된다. 이는 07의 실제 연결이나 운영 적용이 아니다.
