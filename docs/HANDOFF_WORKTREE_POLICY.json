@@ -27,7 +27,9 @@
     "contracts/utt-source-read.schema.json",
     "tests/test_source_read.py",
     "tests/test_snapshot_provider.py",
-    "tests/test_source_server.py"
+    "tests/test_source_server.py",
+    "tests/test_d0_adapter.py",
+    "tests/test_features.py"
   ],
   "development_prefixes": [
     "app/",
