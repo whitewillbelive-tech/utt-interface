@@ -94,3 +94,55 @@ python3 -m app.server --mode readonly --connect-env --port 8765
 ### 08 통합 검증 결과
 
 실행 `20261104T091014Z-2a639190`에서 11개 단계 모두 PASS였다. Python 42개, Node 23개, Draft 2020-12 스키마/합성 봉투 61건, 기존 Chromium 흐름, 09 Chromium 8개 묶음(브라우저 오류 0), 원형 38개와 변경 해시 검사가 통과했다. 오류 상태의 추측 변환 제거와 페이지 cursor 정체·중복·순서 보완을 포함한다. 시험 코드 tree는 위 `6ac6acc…`와 동일하다. 로컬 시험이며 CI·실자료·운영 접합 완료를 의미하지 않는다.
+
+## 2026-11-05 — 07 계약 접수와 원천 의미 대조
+
+이 절이 위의 과거 상태 중 상충하는 부분보다 우선한다. 07의 `UTT_DATA_CONTRACT_PACKAGE/1`에 대해 관리 Chat은 원문 전체를 대조하여 `original_json_schema`, `original_contract_draft_markdown`, `synthetic_examples`가 각각 현행 0.1 스키마·초안·합성 예제와 동일하다고 전달했다. `/1`은 포장 버전이고 실제 읽기 규격은 여전히 초안 `UTT-ACCESS-READ/0.1.0`이다. 08이 Library 링크에 직접 접근했을 때 로그인 화면만 확인했으며 JSON 원문은 읽지 못했다. 위 대조는 **전달받은 관리 Chat의 검증 결과**이며 08의 원문 독립 대조는 아니다. READMODEL·CANONICAL·D1.1을 대체하지 않는다.
+
+기존 HTTPS transport·서버측 인증·명시적 설정·전체 스키마/범위 검증 및 401/403은 구현됐고 이전의 「08 transport·인증 구현 미제공」 차단은 해소됐다. 이전 전체 스키마 합성 검증도 유효하다. 실제 제공 프로그램의 존재나 실자료에서의 동작을 입증한 것은 아니다. 원래 D 계열 서버·설정은 소스 인계에서 제외됐고, 07 승인 환경에 현재 실행 가능한 제공 프로그램이 존재하는지는 미확인이다.
+
+| 원천 의미 | 현재 구현·대응 | 미확정 및 다음 담당 |
+|---|---|---|
+| D0 text·tag·project·source 필터. 빈/공백은 무필터. 초안은 null·빈 문자열을 구별 | 기존 0.1 요청은 각각 전달하고 조용히 변환하지 않는다. 별도 정규화 snapshot 제공자의 검색 정책과 미지원 필터는 아래에 명시한다. | 07: 실제 검색 대상·정규화·tag/source 대응 및 role/review 필드 매핑. 09: 지원되지 않은 필터는 제공하지 않음. |
+| D0 limit/offset은 불변 snapshot이 아님 | 원천 provider에 snapshot과 모든 질의 조건에 결속된 cursor 책임이 있다. 기존 응답 검증의 페이지 내부 검사와 별개다. | 07: 원천 변경·재시작·동시 갱신 때 불변성/중복/누락 검증. |
+| 원천 문자열 비교·관계 ID 안정성 | 기존 검색 dataset asc + record ID asc/desc, 혼합 item kind/dataset/item ID asc를 유지한다. 조회 투영의 ID는 원천에서 제공한 값을 사용한다. | 07: 원천 ID의 dataset 범위·안정성, tie-breaker·문자열 순서 확인. |
+| 관측·후보·확정 관계 및 evidence, D0 lineage | assertion 상태·양끝 dataset·evidence는 받은 그대로 유지한다. lineage/후보를 결정 사건으로 바꾸지 않는다. 미확인 history를 AVAILABLE 빈 배열로 채우지 않는다. | 07: endpoint 유형과 evidence 식별 범위, 실제 원장 읽기 지원/권한 확인. |
+| 검색 근거·원래 locator·parse issue·lineage | 조회 투영은 원형을 덮어쓰지 않는다. 0.1에 없는 필드는 투영만으로 보존을 주장하지 않는다. | 07: 원천 추적 식별과 손실 없는 별도 보존 경계 제시. |
+| B 저장 본문·원출처·좌표 | 원천이 제공한 대상과 버전·해시·단위를 분리한다. B 저장 본문 검증을 Recovery 원출처 검증으로 승격하지 않는다. | 07: source identity/version, 대상·본문 접근·인코딩·좌표별 비민감 매핑. |
+| 대형 기록 | 기존 HTTPS transport 수신 제한 기본 8 MiB, 설정 범위 1–64 MiB. 제한 초과는 실패이며 잘린 성공이나 빈 본문이 아니다. | 07: 실제 필요성과 안전한 분할 규격. 우선 가능한 단일 기록 읽기를 진행한다. |
+
+D0 참조 화면에 있는 검색/상세 응답 외형은 실제 파일·DB 스키마가 아니다. 07에 필요한 것은 승인된 실행환경의 **기존 제공 프로그램 존재와 비민감 호출 규격, D0 저장 형식·필드/NULL/ID/상태/필터 매핑, source/version/대상/좌표 매핑**이다. 실제 자료·경로·주소·키·원본 로그는 보내지 않는다. 07은 별도 Chat이므로 이 문서의 항목을 실제로 받았거나 작업을 수행했다고 가정하지 않는다.
+
+### 출처 읽기 확장과 09 작업 조건
+
+기존 `UTT-ACCESS-READ/0.1.0`의 요청·응답과 스키마는 그대로다. 별도 `contracts/utt-source-read.schema.json`의 `UTT-SOURCE-READ/0.1.0`을 사용한다. `POST /api/source` 요청은 정확히 다음 여섯 필드이고, 값은 모두 비어 있지 않은 문자열이다. `source_version`을 모르면 본문을 추측하지 않고 기존 detail 메타데이터만 표시한다.
+
+```json
+{"contract_version":"UTT-SOURCE-READ/0.1.0","dataset_id":"fictional-dataset","snapshot_id":"fictional-snapshot","record_id":"fictional-record","source_id":"fictional-source","source_version":"fictional-source-v1"}
+```
+
+응답은 `{contract_version,status,result,error}`다. OK의 result는 다섯 identity를 그대로 반영하고 `source`(변경 없는 0.1 출처 메타데이터), `content`, `locator_verification`을 포함한다. `content`는 `availability`, `target_kind`, `target_id`, `target_version`, `locator_target_version`, `text`, `text_sha256`이다. AVAILABLE은 대상·버전·완전한 UTF-8 텍스트와 그 텍스트의 SHA-256을 갖는다. SOURCE_BODY의 target_id는 source_id, RECORD_BODY의 target_id는 record_id이며 기록 본문을 출처 본문으로 자동 대체하지 않는다. source.version과 target_version은 서로 다를 수 있다. metadata의 `content_sha256`은 원본 파일 바이트 해시일 수 있어 텍스트 해시와 자동 동일시하지 않는다. 사용할 수 없는 본문은 null이며 MISSING·UNKNOWN·INACCESSIBLE·NOT_SUPPORTED를 구분한다.
+
+`locator_verification.status`는 VERIFIED·UNVERIFIED·NOT_SUPPORTED·MISMATCH·NOT_AVAILABLE 중 하나다. 현재 UTF-16 반열린 범위만 다시 검증한다. 기존 locator target이 정확히 SOURCE_BODY·RECORD_BODY 또는 합성 전용 SYNTHETIC_SOURCE로 명시되고 content 대상과 맞으며, 별도로 제공된 `locator_target_version`이 `target_version`과 같고 대상/조각 해시와 UTF-16 경계가 모두 맞아야 VERIFIED다. 기존 metadata의 VERIFIED만으로 당회 검증을 통과시키지 않는다. byte/코드포인트와 다른 target은 미지원이며 원래 locator는 보존한다. `locator_target_version`이 null이면 UNVERIFIED다.
+
+형식 오류와 구 버전 이름으로 확장 호출은 400 + INVALID_REQUEST/UNSUPPORTED_CONTRACT, 명시 제공자 미연결은 200 + NOT_SUPPORTED 오류 봉투다. version/snapshot 불일치와 연결 실패를 구분한다. 검증되지 않은 오류 문구는 고정된 비민감 문구로 바꾼다. 기존 HTTPS transport에는 이 확장이 연결되어 있지 않으며 미지원 응답이다. source endpoint는 실제 경로나 URL을 받지 않는다.
+
+09는 이 저장소에 반영된 출처 계약 커밋을 기준으로 UI 전용 브랜치를 만들고 `app/web/`과 UI 전용 시험만 변경한다. detail에 표시된 source metadata의 정확한 identity/version을 사용해 `/api/source`를 호출하고 응답 범위·상태를 확인한다. 메타데이터 확인, SOURCE_BODY 실제 본문 표시, RECORD_BODY 대상, 위치 VERIFIED를 각각 표시한다. 미지원·누락·미확인·접근 불가·연결 실패·버전 불일치를 구분하고, VERIFIED일 때만 표시된 정확한 대상 텍스트를 강조한다. 실제 URL/파일 경로를 열거나 현재 기록 본문을 출처 본문으로 대체하지 않는다. 기존 검색·페이지·상세 UI를 재개발하지 않는다. 합성 대상·별도 출처 본문, 다중 출처, 응답 경쟁, 누락 버전/해시, 이모지 경계, 각 실패 상태를 시험한다. PR에 기준 계약 커밋과 합성 결과를 명시하면 08이 브랜치·변경 범위·결과를 직접 확인하고 병합한다. 자동 전달·PR 제출을 가정하지 않는다.
+
+### 동일 프로세스 정규화 snapshot 제공자
+
+`SnapshotProvider`는 새 `UTT-NORMALIZED-SNAPSHOT/0.1.0` 형식의 **명시적으로 지정된 단일 UTF-8 JSON 파일**을 읽는다. 이는 D0 원형 로더가 아니며, 07이 native D0 필드와의 대응을 확인하기 전 실제 호환을 주장하지 않는다. 현재 원천 데이터를 이 형식으로 복사·변환하는 절차는 제공하거나 자동 실행하지 않는다.
+
+입력 최상위 필드는 `format`, `dataset`, `records`, `projects`, `components`, `relations`, `history`, 선택적 `source_contents`다. dataset은 기존 dataset 필드 중 snapshot_id만 빼고, 각 record/project/component/relation/event는 기존 0.1 스키마 형식이다. history 항목은 `{record_id,history_status,related_record_ids,relations,events}`다. 항목이 없는 기록의 history는 UNKNOWN이다. `source_contents` 항목은 `{record_id,source_id,source_version,content}`이며 content 형식은 위 source 확장과 같다. 해당 source는 그 record의 source_refs에 같은 ID·version으로 있어야 한다. source_contents가 없으면 NOT_SUPPORTED이며 기록 본문 대체가 없다. 합성 생성 예제는 `tests/test_snapshot_provider.py`의 `normalized_payload()`이며 실자료 변환 예제가 아니다. Locator target은 경로·URL을 브라우저로 내보내지 않도록 안전한 영문 기호 식별자만 허용한다. 07이 ID·evidence·원천 trace에 실주소/경로를 넣지 않도록 별도 확인해야 한다.
+
+최대 입력 크기는 32 MiB이며 단일 파일을 메모리에 보유하고, 요청마다 지정한 같은 파일을 다시 읽어 바이트 SHA-256을 비교한다. 파일 내용이 바뀌면 그 인스턴스는 영구적으로 VERSION_MISMATCH가 되어 명시적으로 재시작해야 한다. snapshot ID는 전체 파일 바이트의 SHA-256이고 cursor는 프로세스 임의 키로 서명하여 dataset·snapshot·원래 query 값·모든 필터·sort·page_size를 묶는다. 재시작 후 기존 cursor는 VERSION_MISMATCH다. 이 보장은 이 정규화 파일에 대한 것이고 D0 원천의 저장 일관성을 증명하지 않는다.
+
+이 제공자의 검색은 title·display_summary·AVAILABLE raw_text에 대해 NFKC+casefold 부분 문자열로 수행한다. query null, 빈 문자열, 정규화 후 공백만은 결과 필터를 적용하지 않되 cursor 서명에는 각 원래 값을 따로 넣는다. 이는 이 제공자에 한정된 정책이고 D0 실제 검색 규칙은 아니다. document_role/review_status는 항상 INVALID_REQUEST다. 0.1에 tag/source 필드는 없으며 조용히 버리지 않는다. project 필터는 모든 기록의 관계 상태가 AVAILABLE이고 관계가 USER_CONFIRMED인 경우에만 적용하며, 불확정 관계를 없는 것으로 처리할 상황이면 INVALID_REQUEST다. 정렬은 Unicode 코드포인트 문자열 순서다.
+
+07의 승인된 실행환경에 이미 이 형식의 명시적 단일 입력이 있고 접근이 승인된 경우에만 runtime 설정으로 `UTT_RUNTIME_APPROVED=1`과 `UTT_SNAPSHOT_PATH`를 주입하고 `python3 -m app.server --mode readonly --snapshot-env`를 실행한다. 값은 코드·명령 인자·로그·GitHub로 보내지 않는다. 디렉터리 탐색, 새 자료 이전, 자동 복원·캐시 생성을 하지 않는다. `--snapshot-env`와 `--connect-env`는 동시에 쓸 수 없다. 운영 입력·원천 호환·권한 분리·실행환경 선택 및 실제 실행은 아직 07 확인 전이다.
+
+### 계약 커밋과 비민감 검증 결과
+
+09의 요청·응답 구현 기준과 07에 전달할 실행 코드 기준은 `29bf52ee937896ef958dd55a3d9935cae79c1f96`이다. 이 커밋에는 이 절의 상태 문서만 빠져 있으며 provider/server/스키마/시험은 이후 상태 문서 커밋과 동일하다. 07은 승인 환경에서 이 정확한 코드 SHA를 확인해 실행하고, 실행환경 식별·버전과 각 단계 PASS/FAIL/NOT_RUN/NOT_SUPPORTED만 반환한다. 메타데이터, 별도 출처 본문 열기, 위치 검증을 따로 보고한다. 07의 실자료 시험 결과는 아직 받지 않았다. 09의 새 UI 브랜치·PR도 아직 제출되지 않았다.
+
+합성 검증 `20261104T163049Z-d04c9719`: 11단계 PASS. Python 74개, Node 23개, 기존 전체 스키마 검증 61건, 원형 38개, 기존 Chromium 및 09 기존 UI의 Chromium 8개 묶음이 통과했다. 새 파일 제공자를 직접 사용하는 합성 파일→같은 프로세스 서버→검색·두 페이지·상세→별도 출처 본문 흐름, cursor 결속·재시작·파일 변경, 미지원 필터, 출처 대상/버전/해시/좌표 및 오류를 확인했다. 출처 확장의 독립 스키마·의미 시험도 포함한다. 실제 D0 호환·실자료·운영 접속의 증거는 아니다.
