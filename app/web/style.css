@@ -475,3 +475,11 @@ details label {
     font-size:.75rem;
   }
 }
+
+#filter-support {
+  width:100%;
+  margin:0;
+}
+.source-body {
+  overflow-wrap:anywhere;
+}

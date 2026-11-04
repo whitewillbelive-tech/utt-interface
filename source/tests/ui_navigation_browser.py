@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from app.server import make_server
 from app.provider import error
+from source.tests.source_ui_fixtures import RECORD_TEXT, SOURCE_TEXT, make_source_fixture_server
 from playwright.async_api import async_playwright, expect
 
 
@@ -259,10 +260,17 @@ async def check_relation_targets(browser, base):
 async def check_readonly_boundary(browser, base, readonly):
     page = await browser.new_page()
     try:
-        # The server remains a fictional generator. Only the existing mode response
-        # is intercepted; no real readonly transport is created or accessed.
+        # The server remains a fictional generator. Mode and published feature
+        # support model an unconfirmed readonly provider; no real transport exists.
         await page.route('**/api/mode', lambda route: route.fulfill(json={'mode': 'readonly', 'simulation_namespace': None}))
+        await page.route('**/api/features', lambda route: route.fulfill(json={
+            'contract_version': 'UTT-READ-FEATURES/0.1.0',
+            'filters': {'query': 'UNKNOWN', 'project': 'UNKNOWN',
+                        'document_role': 'UNKNOWN', 'review_status': 'UNKNOWN',
+                        'tag': 'UNSUPPORTED', 'source': 'UNSUPPORTED'},
+        }))
         search_sorts = []
+        search_filters = []
         async def descending_sort(route):
             payload = route.request.post_data_json
             if payload['request']['operation'] == 'capabilities':
@@ -271,17 +279,23 @@ async def check_readonly_boundary(browser, base, readonly):
                 return await route.fulfill(response=response, json=data)
             if payload['request']['operation'] == 'search':
                 search_sorts.append(payload['sort'])
+                search_filters.append((payload['request']['document_role'], payload['request']['review_status']))
             return await route.continue_()
         await page.route('**/api/read', descending_sort)
         await page.goto(base)
         await wait_for_list(page)
         await expect(page.locator('#sort')).to_have_value('id_desc')
+        await expect(page.locator('#role')).to_be_disabled()
+        await expect(page.locator('#review')).to_be_disabled()
+        await expect(page.locator('#role')).to_have_value('')
+        await expect(page.locator('#review')).to_have_value('')
         await expect(page.locator('.record-title').first).to_have_text('가상 빈 설명')
         await page.get_by_role('button', name='필터 초기화', exact=True).click()
         await wait_for_list(page)
         await expect(page.locator('#sort')).to_have_value('id_desc')
         await expect(page.locator('.record-title').first).to_have_text('가상 빈 설명')
         assert len(search_sorts) >= 2 and set(search_sorts) == {'id_desc'}, search_sorts
+        assert search_filters and all(filters == (None, None) for filters in search_filters), search_filters
         await expect(page.locator('#mode')).to_contain_text('읽기 공급자 응답 확인')
         assert not await page.locator('#scenario').is_visible() or not await page.locator('#scenario').is_enabled()
         await page.locator('#search').fill('가상 관측')
@@ -319,8 +333,17 @@ async def check_mobile_return(browser, base):
         await origin.press('Enter')
         await page.get_by_role('button', name='관련 자료: 가상 관측', exact=True).click()
         await expect(page.locator('#detail h2')).to_have_text('가상 관측')
-        await page.get_by_role('button', name='출처 위치 확인', exact=True).first.click()
-        await expect(page.locator('mark')).to_have_text('🧭 동쪽')
+        await expect(page.locator('#detail > .body-text')).to_have_text(RECORD_TEXT)
+        async with page.expect_response(lambda response: response.url.endswith('/api/source')) as source_response:
+            await page.get_by_role('button', name='출처 본문 조회', exact=True).first.click()
+        assert (await (await source_response.value).json())['result']['content']['text'] == SOURCE_TEXT
+        await expect(page.locator('pre.source-body')).to_have_text(SOURCE_TEXT)
+        assert await page.locator('pre.source-body').text_content() == SOURCE_TEXT
+        await expect(page.locator('pre.source-body mark')).to_have_text('🧭 동쪽')
+        await expect(page.locator('.source-verification')).to_have_text('위치 검증: VERIFIED · HASH_AND_RANGE_MATCH')
+        await expect(page.locator('#detail > .body-text')).to_have_text(RECORD_TEXT)
+        assert await page.locator('#detail > .body-text').text_content() == RECORD_TEXT
+        await expect(page.locator('#detail > .body-text mark')).to_have_count(0)
         assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         await page.get_by_role('button', name='← 검색 결과로', exact=True).click()
         await expect(origin).to_be_focused()
@@ -334,7 +357,7 @@ async def check_mobile_return(browser, base):
 
 
 async def main():
-    servers = [make_server(0), make_server(0, mode='readonly')]
+    servers = [make_source_fixture_server(), make_server(0, mode='readonly')]
     for server in servers:
         threading.Thread(target=server.serve_forever, daemon=True).start()
     base, readonly = [f'http://127.0.0.1:{server.server_port}' for server in servers]

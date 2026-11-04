@@ -37,6 +37,8 @@ def main():
         [sys.executable,'tools/validate_schema.py'],
         [sys.executable,'tools/browser_check.py'],
         [sys.executable,'source/tests/ui_navigation_browser.py'],
+        [sys.executable,'source/tests/filter_browser.py'],
+        [sys.executable,'source/tests/source_browser.py'],
         ['git','diff','--check'],
     ]
     report={'run_id':run_id,'commit':output(['git','rev-parse','HEAD']),

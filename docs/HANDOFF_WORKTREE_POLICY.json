@@ -29,7 +29,12 @@
     "tests/test_snapshot_provider.py",
     "tests/test_source_server.py",
     "tests/test_d0_adapter.py",
-    "tests/test_features.py"
+    "tests/test_features.py",
+    "source/tests/filter_browser.py",
+    "source/tests/filter_features.test.mjs",
+    "source/tests/source_browser.py",
+    "source/tests/source_client.test.mjs",
+    "source/tests/source_ui_fixtures.py"
   ],
   "development_prefixes": [
     "app/",
