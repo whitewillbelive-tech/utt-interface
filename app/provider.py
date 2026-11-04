@@ -1,7 +1,4 @@
-"""Draft read contract implementation. All stored rows are generated fiction.
-
-No user path, network, operational cache, or authentication is consulted.
-"""
+"""Read providers: explicit transport injection and separate generated fiction."""
 import base64
 import copy
 import hashlib
@@ -12,6 +9,8 @@ import sqlite3
 import threading
 from typing import Protocol
 from fixtures.synthetic.generate import create, contract_examples
+from app.validation import ResponseError, validate_response
+from app.transport import TransportError
 
 VERSION = 'UTT-ACCESS-READ/0.1.0'
 OPERATIONS = ('capabilities', 'projects', 'search', 'detail', 'related_history')
@@ -21,7 +20,9 @@ SORTS = {'id_asc': 'asc', 'id_desc': 'desc'}
 MESSAGES = {'INVALID_REQUEST': '잘못된 읽기 요청입니다.', 'UNSUPPORTED_CONTRACT': '지원하지 않는 계약입니다.',
             'VERSION_MISMATCH': '기준 버전 또는 페이지가 오래되었습니다. 처음부터 다시 조회하세요.',
             'CONNECTION_UNAVAILABLE': '읽기 공급자가 연결되지 않았습니다.',
-            'ITEM_NOT_FOUND': '이 기준 버전에서 항목을 찾을 수 없습니다.'}
+            'ITEM_NOT_FOUND': '이 기준 버전에서 항목을 찾을 수 없습니다.',
+            'SOURCE_MISSING': '이 기준 버전에서 출처를 찾을 수 없습니다.',
+            'INTERNAL_ERROR': '읽기 공급자의 응답이 계약과 일치하지 않습니다.'}
 
 
 def request(operation, **values):
@@ -58,25 +59,37 @@ class DataProvider(Protocol):
 
 
 class ReadOnlyAdapter:
-    """Injection boundary for a future reviewed transport, never auto-discovered.
-
-    A transport used in this repository must only wrap SyntheticProvider.
-    No production file/API transport has been defined or enabled.
-    """
+    """Validate explicit transport output, without discovery, cache or fallback."""
     def __init__(self, transport=None):
         self.transport = transport
 
     def read(self, q, sort='id_asc'):
+        return self.read_http(q, sort)[1]
+
+    def read_http(self, q, sort='id_asc'):
+        # Keep HTTP status per call; shared mutable status would race across users.
         code = validate(q)
-        if code:
-            return error(q.get('operation') if isinstance(q, dict) else None, code)
+        if code or not isinstance(sort, str) or sort not in SORTS:
+            return 400, error(q.get('operation') if isinstance(q, dict) else None, code or 'INVALID_REQUEST')
         if self.transport is None:
-            return error(q['operation'], 'CONNECTION_UNAVAILABLE')
-        # No fallback on failure. Only a reviewed, injected implementation may read.
+            return 503, error(q['operation'], 'CONNECTION_UNAVAILABLE')
         try:
-            return self.transport(q, sort)
+            response = self.transport(copy.deepcopy(q), sort)
+            validate_response(response, q, sort)
+            if response['status'] == 'ERROR':
+                # Preserve the error code/retry policy, never upstream diagnostics.
+                response = copy.deepcopy(response)
+                response['error']['message'] = MESSAGES[response['error']['code']]
+            return 200, response
+        except ResponseError as exc:
+            return 200, error(q['operation'], exc.code)
+        except TransportError as exc:
+            # The UI consumes business errors from the read envelope. Authentication
+            # and connection failures retain their HTTP status outside that enum.
+            status = exc.http_status if exc.http_status in (401, 403, 503) else 200
+            return status, error(q['operation'], exc.code)
         except Exception:
-            return error(q['operation'], 'CONNECTION_UNAVAILABLE')
+            return 503, error(q['operation'], 'CONNECTION_UNAVAILABLE')
 
 
 class SyntheticProvider:

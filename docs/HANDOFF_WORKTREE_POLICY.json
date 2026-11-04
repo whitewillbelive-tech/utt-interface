@@ -4,6 +4,11 @@
       "original_sha256": "fa8407c26c3d16cdeda3d0f484e8375fdea92866947eefdfc750c5e42ab445f0",
       "sha256": "47713492125025173e69bd78f0058c1d647e83f419c27792c6ccec822df8dd50",
       "reason": "원본 제외 규칙 전체를 유지하고 개발 산출물 .venv/ 및 artifacts/만 추가. docs/REMEDIATION_20261104.md 참조."
+    },
+    "AGENTS.md": {
+      "original_sha256": "84fdb398f6f25e904231f9150f15e54d8e65bf6f712b857ed1d3b6b05cf93636",
+      "sha256": "b91831dda0a759ddf18b4966304fa96ea1a9104787695e7c1d18d6c606909676",
+      "reason": "사용자 승인에 따라 이관용 임시 중단을 개발 재개·커밋·push·기본 브랜치 통합 지시로 갱신. 담당 및 실자료 격리 경계는 docs/WORK_INTEGRATION.md 참조."
     }
   },
   "development_files": [
@@ -13,7 +18,12 @@
     "source/tests/reader_client.test.mjs",
     "source/tests/response_scope.test.mjs",
     "tests/test_reader.py",
-    "tests/test_handoff.py"
+    "tests/test_handoff.py",
+    "requirements.txt",
+    "tests/test_transport.py",
+    "tests/test_backend_integration.py",
+    "source/tests/ui_transport.test.mjs",
+    "source/tests/ui_navigation_browser.py"
   ],
   "development_prefixes": [
     "app/",

@@ -1,10 +1,10 @@
 # UTT · 연구와 창작의 서가
 
-합성 자료만 사용하는 통합 읽기 프로그램입니다. 기존 Python 3.11+ 서버 / 브라우저 ES modules 구조와 A 검색·D-0 검토·D-1 이력 흐름을 참조해 구현했습니다. 기존 전체 프로그램을 복원한 것은 아닙니다. 실제 DB, Dropbox, Scrivener, 운영 캐시·인증 설정을 찾거나 열지 않습니다.
+합성 개발 모드와 명시적 HTTPS 읽기 transport를 제공하는 통합 읽기 프로그램입니다. 실제 접속 검증은 아직 수행하지 않았습니다. 기존 Python 3.11+ 서버 / 브라우저 ES modules 구조와 A 검색·D-0 검토·D-1 이력 흐름을 참조해 구현했습니다. 기존 전체 프로그램을 복원한 것은 아닙니다. 실제 DB, Dropbox, Scrivener, 운영 캐시·인증 설정을 찾거나 열지 않습니다.
 
 ## 실행
 
-현재 체크아웃 `/workspace/utt-interface`에서 실행합니다. 다른 PC에서는 저장소 루트를 사용하세요. 런타임 의존성은 **Python 3.11+ 표준 라이브러리와 현대 브라우저**뿐입니다. npm/pip 설치나 환경변수·DB 경로 입력이 필요 없습니다.
+현재 체크아웃 `/workspace/utt-interface`에서 실행합니다. 다른 PC에서는 저장소 루트를 사용하세요. 런타임은 **Python 3.11+·jsonschema와 현대 브라우저**입니다. `python3 -m pip install -r requirements.txt`로 고정 의존성을 설치합니다. 합성 모드는 환경변수·DB 경로 입력이 필요 없습니다.
 
 ```sh
 cd /workspace/utt-interface
@@ -30,7 +30,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m app.server --port 8766 --copies 1000
 PYTHONDONTWRITEBYTECODE=1 python3 -m app.server --port 8767 --mode readonly
 ```
 
-`readonly`는 합성 공급자를 생성하거나 다른 위치로 자동 대체하지 않습니다. 실제 서버·API·DB 전송 구현은 없습니다.
+`readonly`는 합성 공급자를 생성하거나 다른 위치로 자동 대체하지 않습니다. 승인 데이터 환경에서만 `--connect-env`로 HTTPS endpoint·서버측 인증을 주입합니다. 정확한 설정 이름·오류 의미·07 실행 절차는 [공용 접합 계약](docs/WORK_INTEGRATION.md)에 있습니다. 실주소·키를 이 코드 환경에 입력하지 마세요. 설정 없는 readonly는 미연결입니다.
 
 ## 검증
 
@@ -48,7 +48,7 @@ node --test --test-isolation=none source/tests/*.test.mjs
 
 2026-11-04 보완 결과: Python 23개, Node 20개 통과. Node의 기본 격리 실행은 이 환경에서 파일 단위 결과만 보여 `--test-isolation=none`으로 개별 시험 실행을 확인합니다. 생성기는 새 임시 디렉터리에만 출력하며 기존 파일을 덮어쓰지 않습니다.
 
-추가 검증 도구는 앱 의존성이 아닙니다. 이 환경에는 이미 설치되어 있습니다. 새 환경에서 필요하면 별도 가상환경에 설치합니다.
+Playwright는 추가 검증 도구이며 jsonschema는 공용 응답 검증을 위한 앱 의존성이기도 합니다. 이 환경에는 이미 설치되어 있습니다. 새 환경에서 필요하면 별도 가상환경에 설치합니다.
 
 ```sh
 python3 -m venv /tmp/utt-test-venv
@@ -64,7 +64,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 tools/browser_check.py
 
 ## 구조와 연결 경계
 
-- `app/provider.py`: 공통 `DataProvider.read(request, sort)` 프로토콜, `SyntheticProvider`, 미연결 기본값의 `ReadOnlyAdapter`.
+- `app/provider.py`: 공통 `DataProvider.read(request, sort)` 프로토콜, `SyntheticProvider`, 전체 스키마·범위를 검사하는 `ReadOnlyAdapter`. `app/transport.py`는 명시적 HTTPS와 서버측 인증을 담당합니다.
 - `app/server.py`: 명시적 정적 파일 allowlist, 읽기 전용 `/api/read`, 외부 Origin 거부, 요청 크기 제한, `no-store`·CSP. 요청/본문 로그 없음.
 - `app/web/`: 프레임워크 없는 브라우저 ES modules. DOM `textContent` 사용, 늦은 응답 세대 검사·취소, 접근성 레이블·키보드·반응형 화면.
 - 합성 공급자는 검증된 기존 fixture 생성 함수를 이용합니다. UI 전용 합성 구성요소·관계·두 번째 출처·복제 자료는 별도로 생성합니다. 인계 fixture와 구 모듈·스키마는 그대로 보존했습니다.
@@ -72,9 +72,9 @@ PYTHONDONTWRITEBYTECODE=1 python3 tools/browser_check.py
 - 커서는 서버 실행별 HMAC과 모든 조건·정렬·페이지 크기·스냅샷에 묶입니다. 서버 재시작 또는 조건 변경 후 재사용은 거부됩니다. ID 정렬은 SQLite BINARY 순서이며 최종 ID로 동률을 해소합니다.
 - 합성 세션 namespace는 `utt.synthetic.session.v1`, 기록은 dataset/snapshot별로 구별합니다. 파일·실제 원장·다른 캐시를 사용하지 않습니다. 탭 종료 시 소멸하며 합성 연습 지우기 버튼을 제공합니다.
 
-실제 어댑터 설정 지점은 `ReadOnlyAdapter(transport=...)`입니다. 이 저장소에서는 합성 공급자의 `read`만 주입해 시험했습니다. CLI에는 실제 경로나 URL·비밀 값을 받는 옵션이 없습니다. 향후 승인된 실행 환경에서 Work와 계약·인증·버전·원문 전달 방식을 합의한 뒤 별도 전송 구현을 주입해야 합니다. 현재 경계를 운영용 어댑터 완성으로 간주하지 마세요. 자세한 요구는 [Work 접합 메모](docs/WORK_INTEGRATION.md)를 참고하세요.
+실제 어댑터 설정 지점은 `ReadOnlyAdapter(transport=...)`입니다. CLI는 URL·비밀·실제 경로를 인자로 받지 않습니다. `--mode readonly --connect-env`는 07의 승인된 실행환경에 주입된 설정만 읽습니다. transport·인증·오류 처리 코드의 구현과 실제 원천 접합 증거를 구별합니다. 실제 출처 본문/locator와 관리 명령은 아직 미연결입니다. [Work 접합 계약·협업 상태](docs/WORK_INTEGRATION.md)가 현행 기준입니다.
 
-## 인계 기준과 한계
+## 초기 인계 기록과 한계
 
 기준 커밋: `027b04e278f6ab605450c888f66b9abe63c50443` (`whitewillbelive-tech/utt-interface`, 원격 HEAD와 동일함을 확인). 시작 체크아웃 브랜치는 `work`, 변경 전 작업 트리는 깨끗했습니다. 작업 브랜치: `feat/synthetic-reader`.
 
@@ -83,6 +83,8 @@ PYTHONDONTWRITEBYTECODE=1 python3 tools/browser_check.py
 C 파일 미리보기·인증·복원, D-1.1 운영 원장 정정·백업·복원, D-2 실제 판단 기반 영향 분석·일괄 제안, 원본 Windows 실행기는 미인계 의존성과 별도 명령 계약이 필요합니다. 화면에 그 상태를 표시하며 원형 코드를 활성화하지 않았습니다. 실제 DB 연결·실제 규모·Windows 수용 시험·운영 배포는 수행하지 않았습니다.
 
 ## 2026-11-04 보완 및 재현 증거
+
+아래 초기 기준/시험 건수는 당시 기록입니다. 현재 개발 재개·push·기본 브랜치 통합 지시와 실제 접합 상태는 [WORK_INTEGRATION.md](docs/WORK_INTEGRATION.md)를 따릅니다. 09 UI는 별도 브랜치의 후속 커밋을 검토해 병합합니다. 합성 성공만으로 운영 완료를 표시하지 않습니다.
 
 현재 보완 브랜치는 `fix/reader-remediation-20261104`이며 `6520dc1`의 구현을 포함합니다. 응답은 전송한 request의 dataset/snapshot에 고정해 검사하며, capabilities 초기 null 범위에서도 내부 dataset descriptor를 검사합니다. 내부 레코드·프로젝트·구성요소·출처·사건의 dataset과 관계 endpoint 범위를 검사합니다. 관계에 계약에 없는 dataset_id를 요구하지 않으며 명시적인 교차 dataset 관계는 허용합니다. 상세 이동의 현재 자료와 목록에서 처음 선택한 자료를 구분해 관련 자료 이동 후에도 원래 목록 버튼으로 초점을 돌립니다.
 

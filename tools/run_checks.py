@@ -36,6 +36,7 @@ def main():
         ['node','--test','--test-isolation=none',*[str(p.relative_to(ROOT)) for p in sorted((ROOT/'source/tests').glob('*.test.mjs'))]],
         [sys.executable,'tools/validate_schema.py'],
         [sys.executable,'tools/browser_check.py'],
+        [sys.executable,'source/tests/ui_navigation_browser.py'],
         ['git','diff','--check'],
     ]
     report={'run_id':run_id,'commit':output(['git','rev-parse','HEAD']),
