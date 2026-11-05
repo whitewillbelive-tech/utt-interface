@@ -204,9 +204,10 @@ class D0Client:
                 document_role=None, review_status=None):
         """Get one native offset page without mapping, sorting or normalization.
 
-        None omits a query key. Empty and whitespace values are sent byte-for-byte
-        as UTF-8 query values; their confirmed D0 no-filter meaning belongs to the
-        native server. Native tag/source are not aliases for role/review. Bounds
+        None omits a query key. Empty and whitespace values are sent unchanged
+        as UTF-8 query values. Work reports missing/empty q as no filter and
+        whitespace-only q as a literal LIKE condition. Native tag/source are
+        not aliases for role/review. Bounds
         below are client resource limits, not claims about server capabilities.
         """
         if (document_role is not None or review_status is not None

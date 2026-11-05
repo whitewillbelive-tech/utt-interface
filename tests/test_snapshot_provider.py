@@ -146,7 +146,7 @@ class SnapshotProviderTests(unittest.TestCase):
         self.assertEqual(self.provider.read(q, 'id_desc')['error']['code'], 'VERSION_MISMATCH')
         restarted = SnapshotProvider(self.path)
         self.assertEqual(restarted.read(q)['error']['code'], 'VERSION_MISMATCH')
-        self.assertEqual(self.provider.read({**q, 'dataset_id': 'foreign'})['error']['code'], 'ITEM_NOT_FOUND')
+        self.assertEqual(self.provider.read({**q, 'dataset_id': 'foreign'})['error']['code'], 'VERSION_MISMATCH')
 
     def test_external_file_change_never_auto_reloads_even_if_restored(self):
         original = self.path.read_bytes()

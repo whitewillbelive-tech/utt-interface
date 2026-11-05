@@ -1,12 +1,13 @@
 """Read providers: explicit transport injection and separate generated fiction."""
-import base64
 import copy
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import sqlite3
 import threading
+import time
 from typing import Protocol
 from fixtures.synthetic.generate import create, contract_examples
 from app.validation import ResponseError, validate_response
@@ -93,11 +94,25 @@ class ReadOnlyAdapter:
 
 
 class SyntheticProvider:
+    """Generated fiction with opaque process-local, expiring page handles.
+
+    Handle state contains only offset, keyed context HMAC and issue/expiry times.
+    No raw filters or client-readable fingerprint are embedded in the token.
+    This cursor policy does not establish any native D0 snapshot guarantees.
+    """
+    _CURSOR_TTL_SECONDS = 15 * 60
+    _MAX_CURSOR_HANDLES = 10000
+    _CURSOR_HANDLE = re.compile(r'^[A-Za-z0-9_-]{43}$')
+
+    class _CursorUnavailable(Exception):
+        pass
+
     def __init__(self, copies=1):
         if type(copies) is not int or not 1 <= copies <= 10000:
             raise ValueError('copies must be 1..10000')
         self.lock = threading.RLock()
         self.key = secrets.token_bytes(32)
+        self._cursors = {}
         self.examples = contract_examples(create())
         self.dataset = copy.deepcopy(self.examples['capabilities']['snapshot'])
         self.dataset['snapshot_id'] = f'synthetic-ui-v1-copies-{copies}'
@@ -134,31 +149,57 @@ class SyntheticProvider:
         self.db.commit()
 
     def close(self):
-        self.db.close()
+        with self.lock:
+            self._cursors.clear()
+            self.db.close()
 
     def _ok(self, op, result):
         return dict(contract_version=VERSION, operation=op, status='OK', snapshot=copy.deepcopy(self.dataset), result=copy.deepcopy(result), error=None)
 
     def _fingerprint(self, q, sort):
-        return hashlib.sha256(json.dumps({**q, 'cursor': None, 'ui_sort': sort}, sort_keys=True).encode()).hexdigest()
+        raw = json.dumps({**q, 'cursor': None, 'ui_sort': sort}, sort_keys=True,
+                         separators=(',', ':'), ensure_ascii=False).encode('utf-8')
+        return hmac.digest(self.key, b'UTT-synthetic-cursor-context\0' + raw, 'sha256')
+
+    def _expire_cursors(self, now):
+        # Lookup, expiration and issuance run under self.lock. Only expired
+        # entries are removed; live back-navigation handles are never evicted.
+        for token, state in list(self._cursors.items()):
+            if now >= state[3]:
+                del self._cursors[token]
 
     def _cursor(self, offset, fingerprint):
-        payload = json.dumps([offset, fingerprint], separators=(',', ':')).encode()
-        return base64.urlsafe_b64encode(payload).decode() + '.' + hmac.new(self.key, payload, 'sha256').hexdigest()
+        now = time.monotonic()
+        self._expire_cursors(now)
+        for token, state in self._cursors.items():
+            if (state[2] <= now and state[0] == offset
+                    and hmac.compare_digest(state[1], fingerprint)):
+                # A replay does not consume capacity or renew its original TTL.
+                return token
+        if len(self._cursors) >= self._MAX_CURSOR_HANDLES:
+            raise self._CursorUnavailable()
+        for _ in range(4):
+            token = secrets.token_urlsafe(32)
+            if token not in self._cursors:
+                self._cursors[token] = (offset, fingerprint, now, now + self._CURSOR_TTL_SECONDS)
+                return token
+        # A failing/colliding entropy source must not overwrite another handle.
+        raise self._CursorUnavailable()
 
     def _offset(self, cursor, fingerprint):
         if cursor is None:
             return 0
         try:
-            token, sig = cursor.split('.')
-            payload = base64.b64decode(token, altchars=b'-_', validate=True)
-            if not hmac.compare_digest(hmac.new(self.key, payload, 'sha256').hexdigest(), sig):
+            if not self._CURSOR_HANDLE.fullmatch(cursor):
                 raise ValueError()
-            offset, fp = json.loads(payload)
-            if fp != fingerprint or type(offset) is not int or offset < 0:
+            now = time.monotonic()
+            self._expire_cursors(now)
+            state = self._cursors.get(cursor)
+            if (state is None or not state[2] <= now < state[3]
+                    or not hmac.compare_digest(state[1], fingerprint)):
                 raise ValueError()
-            return offset
-        except (ValueError, TypeError, UnicodeError):
+            return state[0]
+        except (ValueError, TypeError):
             raise ValueError('invalid cursor') from None
 
     def _page(self, q, sort, offset, has_more, mixed=False):
@@ -173,16 +214,19 @@ class SyntheticProvider:
         op = q['operation']
         if not isinstance(sort, str) or sort not in SORTS:
             return error(op, 'INVALID_REQUEST')
-        if q['dataset_id'] not in (None, self.dataset['dataset_id']):
-            return error(op, 'ITEM_NOT_FOUND')
-        if q['snapshot_id'] not in (None, self.dataset['snapshot_id']):
-            return error(op, 'VERSION_MISMATCH')
-        try:
-            offset = self._offset(q['cursor'], self._fingerprint(q, sort))
-        except ValueError:
-            return error(op, 'VERSION_MISMATCH')
         with self.lock:
-            return self._read(q, sort, offset)
+            if q['dataset_id'] not in (None, self.dataset['dataset_id']):
+                return error(op, 'VERSION_MISMATCH' if q['cursor'] is not None else 'ITEM_NOT_FOUND')
+            if q['snapshot_id'] not in (None, self.dataset['snapshot_id']):
+                return error(op, 'VERSION_MISMATCH')
+            try:
+                offset = self._offset(q['cursor'], self._fingerprint(q, sort))
+            except ValueError:
+                return error(op, 'VERSION_MISMATCH')
+            try:
+                return self._read(q, sort, offset)
+            except self._CursorUnavailable:
+                return error(op, 'CONNECTION_UNAVAILABLE')
 
     def _read(self, q, sort, offset):
         op = q['operation']; size = q['page_size']
