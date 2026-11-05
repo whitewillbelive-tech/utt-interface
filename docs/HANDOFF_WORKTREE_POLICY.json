@@ -34,7 +34,9 @@
     "source/tests/filter_features.test.mjs",
     "source/tests/source_browser.py",
     "source/tests/source_client.test.mjs",
-    "source/tests/source_ui_fixtures.py"
+    "source/tests/source_ui_fixtures.py",
+    "tests/test_d11_reader.py",
+    "tests/test_d0_projection.py"
   ],
   "development_prefixes": [
     "app/",
