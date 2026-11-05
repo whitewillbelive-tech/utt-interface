@@ -12,9 +12,17 @@ Search uses NFKC + casefold substring matching over title, display_summary and
 AVAILABLE raw_text. Null, empty and normalized whitespace queries do not filter.
 Document/review filters have no approved native mapping and are rejected. Project
 filtering requires complete AVAILABLE, USER_CONFIRMED local membership metadata.
+
+Pagination uses process-local random 256-bit handles. Only the offset, a keyed
+context HMAC and monotonic issue/expiry times stay in the bounded handle store;
+no query/filter text or client-readable fingerprint is put in a cursor. Handles
+are reusable for 15 minutes without renewing their expiry. At 10,000 live handles
+new contexts/pages fail explicitly with CONNECTION_UNAVAILABLE until entries
+expire; existing handles are not evicted to make room. These cursor guarantees
+apply to this captured normalized image, not native D0 snapshot/ABA detection.
 """
-import base64
 import copy
+from dataclasses import dataclass
 import hashlib
 import hmac
 import json
@@ -23,6 +31,7 @@ import re
 import secrets
 import stat
 import threading
+import time
 import unicodedata
 from pathlib import Path
 
@@ -38,6 +47,17 @@ _VALIDATORS = {kind: Draft202012Validator({'$ref': '#/$defs/' + kind,
                                         '$defs': _SCHEMA['$defs']})
                for kind in (*_KINDS, 'dataset')}
 _TARGET = re.compile(r'^[A-Za-z][A-Za-z0-9_-]{0,63}$')
+_CURSOR_HANDLE = re.compile(r'^[A-Za-z0-9_-]{43}$')
+_CURSOR_TTL_SECONDS = 15 * 60
+_MAX_CURSOR_HANDLES = 10000
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class _CursorState:
+    offset: int
+    context_hmac: bytes
+    issued_at: float
+    expires_at: float
 
 
 class SnapshotError(Exception):
@@ -71,6 +91,7 @@ class SnapshotProvider:
     def __init__(self, path, max_input_bytes=33554432):
         self._lock = threading.RLock()
         self._key = secrets.token_bytes(32)
+        self._cursors = {}
         self._stale = False
         try:
             if (not isinstance(path, (str, os.PathLike)) or not os.fspath(path)
@@ -256,7 +277,16 @@ class SnapshotProvider:
     def _ensure_current(self):
         if self._stale:
             raise SnapshotError('VERSION_MISMATCH')
-        if hashlib.sha256(self._read_bytes()).hexdigest() != self._digest:
+        try:
+            raw = self._read_bytes()
+        except Exception:
+            # Observed loss of the selected input invalidates this captured
+            # session, even when identical bytes later reappear at the path.
+            # Preserve the first safe connection error; subsequent reads must
+            # explicitly restart instead of silently resuming an old cursor.
+            self._stale = True
+            raise
+        if hashlib.sha256(raw).hexdigest() != self._digest:
             self._stale = True
             raise SnapshotError('VERSION_MISMATCH')
 
@@ -265,28 +295,52 @@ class SnapshotProvider:
                     snapshot=copy.deepcopy(self._dataset), result=copy.deepcopy(result), error=None)
 
     def _fingerprint(self, q, sort):
-        return hashlib.sha256(json.dumps({**q, 'cursor': None, 'sort': sort},
-                                        sort_keys=True).encode('utf-8')).hexdigest()
+        raw = json.dumps({**q, 'cursor': None, 'sort': sort}, sort_keys=True,
+                         separators=(',', ':'), ensure_ascii=False).encode('utf-8')
+        return hmac.digest(self._key, b'UTT-normalized-cursor-context\0' + raw, 'sha256')
+
+    def _expire_cursors(self, now):
+        # All callers hold _lock. Expiration is the only automatic removal;
+        # capacity must never evict a still-valid back/previous-page handle.
+        for token, state in list(self._cursors.items()):
+            if now >= state.expires_at:
+                del self._cursors[token]
 
     def _cursor(self, offset, fingerprint):
-        raw = json.dumps([offset, fingerprint], separators=(',', ':')).encode('ascii')
-        return base64.urlsafe_b64encode(raw).decode('ascii') + '.' + hmac.new(self._key, raw, 'sha256').hexdigest()
+        now = time.monotonic()
+        self._expire_cursors(now)
+        # Repeated/back navigation to the same page reuses its live handle. It
+        # does not consume capacity or extend the original expiry.
+        for token, state in self._cursors.items():
+            if (state.issued_at <= now and state.offset == offset
+                    and hmac.compare_digest(state.context_hmac, fingerprint)):
+                return token
+        if len(self._cursors) >= _MAX_CURSOR_HANDLES:
+            raise SnapshotError('CONNECTION_UNAVAILABLE')
+        for _ in range(4):
+            token = secrets.token_urlsafe(32)
+            if token not in self._cursors:
+                self._cursors[token] = _CursorState(offset, fingerprint, now,
+                                                    now + _CURSOR_TTL_SECONDS)
+                return token
+        raise SnapshotError('CONNECTION_UNAVAILABLE')
 
     def _offset(self, q, sort):
         if q['cursor'] is None:
             return 0
         try:
-            if len(q['cursor']) > 2048:
+            token = q['cursor']
+            if not _CURSOR_HANDLE.fullmatch(token):
                 raise ValueError()
-            token, signature = q['cursor'].split('.')
-            raw = base64.b64decode(token, altchars=b'-_', validate=True)
-            if not hmac.compare_digest(hmac.new(self._key, raw, 'sha256').hexdigest(), signature):
+            now = time.monotonic()
+            self._expire_cursors(now)
+            state = self._cursors.get(token)
+            if (state is None or not state.issued_at <= now < state.expires_at
+                    or not hmac.compare_digest(state.context_hmac, self._fingerprint(q, sort))):
                 raise ValueError()
-            offset, fingerprint = json.loads(raw.decode('ascii'))
-            if (type(offset) is not int or offset < 0 or offset % q['page_size']
-                    or fingerprint != self._fingerprint(q, sort)):
+            if state.offset < 0 or state.offset % q['page_size']:
                 raise ValueError()
-            return offset
+            return state.offset
         except Exception:
             raise SnapshotError('VERSION_MISMATCH') from None
 
@@ -305,7 +359,7 @@ class SnapshotProvider:
 
     def _scope(self, q):
         if q['dataset_id'] not in (None, self._dataset['dataset_id']):
-            raise SnapshotError('ITEM_NOT_FOUND')
+            raise SnapshotError('VERSION_MISMATCH' if q.get('cursor') is not None else 'ITEM_NOT_FOUND')
         if q['snapshot_id'] not in (None, self._dataset['snapshot_id']):
             raise SnapshotError('VERSION_MISMATCH')
 

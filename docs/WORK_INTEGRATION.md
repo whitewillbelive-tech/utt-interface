@@ -137,9 +137,9 @@ D0 참조 화면에 있는 검색/상세 응답 외형은 실제 파일·DB 스�
 
 입력 최상위 필드는 `format`, `dataset`, `records`, `projects`, `components`, `relations`, `history`, 선택적 `source_contents`다. dataset은 기존 dataset 필드 중 snapshot_id만 빼고, 각 record/project/component/relation/event는 기존 0.1 스키마 형식이다. history 항목은 `{record_id,history_status,related_record_ids,relations,events}`다. 항목이 없는 기록의 history는 UNKNOWN이다. `source_contents` 항목은 `{record_id,source_id,source_version,content}`이며 content 형식은 위 source 확장과 같다. 해당 source는 그 record의 source_refs에 같은 ID·version으로 있어야 한다. source_contents가 없으면 NOT_SUPPORTED이며 기록 본문 대체가 없다. 합성 생성 예제는 `tests/test_snapshot_provider.py`의 `normalized_payload()`이며 실자료 변환 예제가 아니다. Locator target은 경로·URL을 브라우저로 내보내지 않도록 안전한 영문 기호 식별자만 허용한다. 07이 ID·evidence·원천 trace에 실주소/경로를 넣지 않도록 별도 확인해야 한다.
 
-최대 입력 크기는 32 MiB이며 단일 파일을 메모리에 보유하고, 요청마다 지정한 같은 파일을 다시 읽어 바이트 SHA-256을 비교한다. 파일 내용이 바뀌면 그 인스턴스는 영구적으로 VERSION_MISMATCH가 되어 명시적으로 재시작해야 한다. snapshot ID는 전체 파일 바이트의 SHA-256이고 cursor는 프로세스 임의 키로 서명하여 dataset·snapshot·원래 query 값·모든 필터·sort·page_size를 묶는다. 재시작 후 기존 cursor는 VERSION_MISMATCH다. 이 보장은 이 정규화 파일에 대한 것이고 D0 원천의 저장 일관성을 증명하지 않는다.
+최대 입력 크기는 32 MiB이며 단일 파일을 메모리에 보유하고, 요청마다 지정한 같은 파일을 다시 읽어 바이트 SHA-256을 비교한다. 파일 내용이 바뀌면 그 인스턴스는 영구적으로 VERSION_MISMATCH가 되어 명시적으로 재시작해야 한다. snapshot ID는 캡처된 정규화 파일 바이트의 SHA-256이다. cursor는 256-bit 무작위 불투명 서버측 핸들이며 프로세스 메모리에 offset·키가 있는 조건 HMAC·만료 시각만 보관한다. dataset·snapshot·원래 query 값·모든 필터·sort·page_size를 묶고 15분 또는 재시작 후 거부한다. 활성 핸들은 최대 10,000개이며 한도에서 기존 핸들을 지우지 않고 새 발급을 실패시킨다. 이 보장은 캡처된 정규화 이미지에만 적용하며 원천 입력의 모든 범위, 캡처 전·중 ABA 부재나 native D0 불변성을 증명하지 않는다.
 
-이 제공자의 검색은 title·display_summary·AVAILABLE raw_text에 대해 NFKC+casefold 부분 문자열로 수행한다. query null, 빈 문자열, 정규화 후 공백만은 결과 필터를 적용하지 않되 cursor 서명에는 각 원래 값을 따로 넣는다. 이는 이 제공자에 한정된 정책이고 D0 실제 검색 규칙은 아니다. document_role/review_status는 항상 INVALID_REQUEST다. 0.1에 tag/source 필드는 없으며 조용히 버리지 않는다. project 필터는 모든 기록의 관계 상태가 AVAILABLE이고 관계가 USER_CONFIRMED인 경우에만 적용하며, 불확정 관계를 없는 것으로 처리할 상황이면 INVALID_REQUEST다. 정렬은 Unicode 코드포인트 문자열 순서다.
+이 제공자의 검색은 title·display_summary·AVAILABLE raw_text에 대해 NFKC+casefold 부분 문자열로 수행한다. query null, 빈 문자열, 정규화 후 공백만은 결과 필터를 적용하지 않되 cursor의 키가 있는 조건 결속에는 각 원래 값을 따로 반영한다. 이는 이 제공자에 한정된 정책이고 D0 실제 검색 규칙은 아니다. document_role/review_status는 항상 INVALID_REQUEST다. 0.1에 tag/source 필드는 없으며 조용히 버리지 않는다. project 필터는 모든 기록의 관계 상태가 AVAILABLE이고 관계가 USER_CONFIRMED인 경우에만 적용하며, 불확정 관계를 없는 것으로 처리할 상황이면 INVALID_REQUEST다. 정렬은 Unicode 코드포인트 문자열 순서다.
 
 07의 승인된 실행환경에 이미 이 형식의 명시적 단일 입력이 있고 접근이 승인된 경우에만 runtime 설정으로 `UTT_RUNTIME_APPROVED=1`과 `UTT_SNAPSHOT_PATH`를 주입하고 `python3 -m app.server --mode readonly --snapshot-env`를 실행한다. 값은 코드·명령 인자·로그·GitHub로 보내지 않는다. 디렉터리 탐색, 새 자료 이전, 자동 복원·캐시 생성을 하지 않는다. `--snapshot-env`와 `--connect-env`는 동시에 쓸 수 없다. 운영 입력·원천 호환·권한 분리·실행환경 선택 및 실제 실행은 아직 07 확인 전이다.
 
@@ -229,3 +229,37 @@ D0 참조 화면에 있는 검색/상세 응답 외형은 실제 파일·DB 스�
 이 두 계층은 아직 `app/server.py`·UI·실제 D0/D1.1 원장에 연결하지 않는다. 실제 원형 D1.1 스키마·직렬화·체인 시작과 순서·부분 이력·접근/동시성 규약을 07이 비민감하게 확인하기 전 새로운 포맷의 결과를 원형 호환 또는 운영 이력으로 표시하지 않는다. 동일 승인 환경의 실제 단계별 검증도 NOT_RUN이다.
 
 합성 통합 검증 `20261105T073514Z-f1818646`: 전체 13단계 PASS, Python 120개, Node 46개, 기존 스키마 61건, Chromium 기존 13·탐색 8·필터 7·출처 7묶음, 원형 38개. D1 휴대용 입력에서 원본 파일·sidecar 불변, 부재·접근 거부·부분·순서 충돌, WAL 거부·읽기 중 교체 감지와 payload 보존을 검사했고 D0 중간 구조의 NULL/빈 값·다중 근거 보존도 검사했다. 실행 당시 변경된 작업트리에서 시험했으며, 결과를 커밋/원격 코드 tree와 대조한다. 실제 D0/D1.1 원장·원출처·운영 환경에 대한 시험은 NOT_RUN이다.
+
+## 2026-11-05 — D0 읽기 경계 후속
+
+사용자가 처음 `gate_real_read_1_2026_11_05` 반영을 요청했을 때 본문은 요청과 저장소에 없었고 Library 링크는 로그인 화면만 반환했다. 이후 사용자가 비민감 계약 JSON을 첨부해 08이 해당 gate와 후속 원천/환경 결과를 직접 읽었다. 아래 원문 수신·추가 판정이 현행이다. 이 항목은 불변성·필드 대응 승인이 아니며 실제 자료·주소·경로·키·로그는 요청하지 않는다.
+
+확인된 이전 결과에 따라 D0 프로그램의 시작 시 파일 해시 검사는 매 요청·교체 감지를 증명하지 않는다. `D0Client.read()`는 기존 READ/0.1의 snapshot·cursor·정렬·관계 요구를 충족한다는 증거가 없으므로 `UNSUPPORTED_CONTRACT`를 유지한다. 실제 데이터셋의 내용이나 사용자 승인 상태를 추측해 연결 성공을 만들지 않는다.
+
+### native D0 탐색 — 불변성 미확인
+
+`app/d0_browse.py`의 `D0BrowseSession`은 승인된 같은 호스트에서 명시적으로 주입된 기존 `D0Client`를 사용한다. 별도 native 경계로 `search(q, tag, project, source, sort)` → `next_page(page)` → `detail(page, record_id)`를 제공하며 각 결과는 기존 `D0Evidence`와 `D0-STRUCTURAL-INSPECTION/0.1.0`을 통해 원형 JSON 및 구조를 보존한다. 검색어·NULL·빈 문자열·공백·tag/project/source·D0 정렬은 정규화하거나 UTT 필터로 바꾸지 않는다. 원래 source의 복수 evidence/locator와 B 저장 본문을 보존하고 원출처나 승인된 사건으로 승격하지 않는다. 반환 원문·ID·질의는 승인 환경 안에서만 다루며 로그·Codex·GitHub에 보내지 않는다.
+
+결과의 `consistency=UNVERIFIED`는 고정이다. 이는 UTT-ACCESS-READ/0.1.0 응답·snapshot·cursor가 아니다. UI/HTTP에 연결하지 않았고 `D0Client.read()`는 `UNSUPPORTED_CONTRACT`를 유지한다. native offset 페이지 이동은 순서대로 현재 페이지에서만 허용된다. 이미 본 ID 중복, 정수/문자열 ID의 상세 요청 충돌, 총건수 변화, 조기 빈/짧은 페이지가 관찰되면 중단하고 새 검색을 요구한다. 이전 query의 페이지 객체·다른 세션의 페이지·현재 페이지에 없는 기록 ID는 거부한다. 보이는 ID 집합은 제한을 초과하면 중단하며 이전 ID를 버려 검사를 약화하지 않는다. 반환 결과와 현재 페이지만 보유하고 이전 응답·상세 본문을 세션에 캐시하지 않는다. 중복 검사용 ID 상태는 세션 비밀키로 생성한 고정 길이 HMAC만 보관한다. 이 API는 코드 호출용이며 browser/HTTP에 연결하지 않았다.
+
+이 검사는 **불변성 보장이 아니다**. 같은 건수의 미확인 교체나 원천 변경은 중복·건수 검사에서 누락될 수 있다. 상세의 원래 identity 의미도 07 대조 전 UNVERIFIED이며 결과는 `IDENTITY_UNVERIFIED` 원형 증거로 표시한다. `canonical_record.id`가 명시되어 요청 ID와 다르면 원본 의미가 완전히 확정되지 않았더라도 보수적으로 충돌을 거부한다. ID가 같다고 원천 identity 매핑을 검증한 것은 아니다. 검색 결과가 비어도 원천 전체의 부재·최신성이나 페이지 사이 불변성을 증명하지 않는다. native 상세 원형에 lineage나 후보가 있어도 결정 사건·승인 상태로 바꾸지 않는다. 안정적인 UI 페이지가 필요한 READ/0.1 경로는 증거가 들어오기 전 계속 미지원이다.
+
+합성 D0 HTTP 시험 서버는 `tests/synthetic_d0_server.py`에만 있고 명시적 임시 가상 파일과 marker를 요구한다. 실제 D0 schema나 원천 snapshot의 증거가 아니다. 별도 정규화 `SnapshotProvider`의 기존 합성 불변성 시험은 바이트 내용·조건에 묶인 cursor를 사용한다. 파일 바이트가 변경되면 거부하고 이전 바이트로 복구해도 기존 provider는 stale을 유지한다. 정확히 같은 바이트의 파일 교체는 같은 내용 snapshot을 유지하되, 프로세스 재시작 후 이전 cursor는 거부한다. 이 동작은 D0 원천에 적용하지 않는다.
+
+07이 gate 본문을 전달하면 최소한 (1) 원천 불변성 및 서버가 동일 대상에 결속되는 증거, (2) 목록/상세 원본 ID와 NULL 및 각 검색·정렬·관계·출처 필드의 대응, (3) 다중 evidence/locator와 history 접근 상태를 대조한다. 사용자 실행환경의 실제 검색·목록·다음 페이지·상세·출처는 현재 NOT_RUN이다. 원천 파일·주소·경로·인증·로그는 반환하지 않는다.
+
+### Work gate 원문 수신·추가 판정
+
+사용자가 첨부한 비민감 `UTT_DATA_CONTRACT_v1.json`의 `gate_real_read_1_2026_11_05`와 `work_followup_source_and_host_2026_11_05`를 08이 직접 읽었다. 포장 버전은 `UTT_DATA_CONTRACT_PACKAGE/1`이고, 첨부 원문 스키마·초안·합성 예제는 현재 저장소 파일과 각각 동일하다. 이전의 gate 미수신 기록은 당시 상태다. 이 gate는 실제 자료가 없는 부분 원천 근거이며 기준 코드 `b47031e933c82e425381a20f56e021a4a213c61b`에 대한 실제 실행은 전 단계 NOT_RUN이다.
+
+Gate는 실제 고정 dataset의 **전체 입력 범위**와 파일 교체·SQLite 보조 파일을 포함한 세션 내 불변성을 증명해야만 snapshot/cursor를 허용한다. 일시적 요청 전후 해시나 변경 후 복구(ABA)를 배제할 수 없는 검사, D0 startup 해시, 가변 DB의 SQLite immutable 옵션만으로는 불충분하다. 순서·고유 tie-breaker·모든 실제 필터/정렬/페이지 크기에 결속하고 위조·만료·불일치를 거부해야 하며, 민감 필터를 열람 가능한 cursor에 담지 않는다. 이 근거는 아직 확인되지 않았고 실제 native D0를 READ/0.1에 연결하지 않는다.
+
+기존 D0의 관찰 관계와 중복 근거는 원형으로 보존한다. 원래 NULL이 이미 빈 문자열로 변환된 부분은 원형 근거 없이 되돌리지 않는다. 기존 원출처 본문 및 locator의 접근성은 미확인이다. D1.1 진단이 application_id `0x55544431`, events 테이블, seq/chain_hash를 기대했다는 사실은 전체 native DDL·직렬화·event 체계·호환성의 증거가 아니다. 07 추가 탐색에서도 안전한 source-only 원형은 찾지 못했고 실제 원장은 열지 않았다. portable D11 reader를 기존 원장에 연결하거나 실제 이력의 유효성을 추론하지 않는다.
+
+사용자 전용 승인 환경·기존 데이터 접근·개발 도구와 자격증명/로그에 대한 OS 차단은 아직 확인되지 않았다. loopback, canary 시험, Work 보관, Python 실행만으로 권한 분리를 증명하지 않는다. 필요 시 07은 민감값 없이 환경 종류와 분리 검증 PASS/FAIL/UNKNOWN, 같은 코드의 실제 단계별 결과만 반환한다. 새 호스트·계정 생성이나 실제 데이터 이동은 이 gate에서 승인되지 않았다.
+
+합성 공급자 `SyntheticProvider`와 정규화 `SnapshotProvider`는 각각 프로세스 내부의 무작위 불투명 cursor 핸들을 쓴다. 클라이언트 cursor에는 질의·필터 원문이나 무키 fingerprint가 없다. 핸들은 최대 10,000개, 고정 수명 15분이며 유효한 이전 페이지 핸들을 용량 확보를 위해 자동 퇴출하지 않는다. 정규화 파일에서 관찰된 읽기 실패·변경 뒤 복원은 기존 세션을 재개하지 않는다. 관찰하지 못한 A→B→A는 감지하지 못하나 이전에 캡처한 메모리 이미지를 계속 제공한다. 이것을 D0 원천의 불변성·ABA 차단 검증으로 해석하지 않는다.
+
+이번 합성 검증 `20261105T090046Z-5ff498ce`: 전체 13단계 PASS, Python 165개, Node 46개, 기존 전체 스키마 61건, Chromium 기존 13·탐색 8·필터 7·출처 7묶음, 인계 원형 38개. 임시 가상 D0 파일과 loopback 서버로 새 native 탐색의 검색→두 페이지→상세 원형 조회를 실행했고 query/필터/정렬/원래 ID/NULL/복수 근거를 대조했다. 파일 변경·교체·재시작과 관찰 가능한 중복·누락을 시험하고, 동일 건수의 미관찰 교체는 판별할 수 없음을 확인했다. 별도 정규화 합성 이미지의 cursor 위조·문맥·만료·용량·재시작·ABA 한계를 시험했다. 시험은 커밋 전 작업트리에서 실행했으며 원격 commit tree와 비교한다. 원천 접속·보호된 환경·운영 적용의 증거가 아니다.
+
+이번 native D0 탐색·불투명 cursor 구현의 코드 기준은 `25fd6f8edb770d087c53f4809bc460327504e5cb`이다. 이후 이 문서의 상태 기록만 추가했다. 07에서 동일 코드를 실행할 수 있는 승인 환경·개발 도구 차단이 확인되면 이 SHA와 비민감 단계 결과를 대조한다. 현재는 기존 UI의 실제 D0 검색/목록/다음/상세 연결과 별도 원출처 본문이 모두 NOT_RUN이며 운영 배포도 수행하지 않았다.

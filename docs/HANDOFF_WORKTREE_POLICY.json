@@ -36,7 +36,12 @@
     "source/tests/source_client.test.mjs",
     "source/tests/source_ui_fixtures.py",
     "tests/test_d11_reader.py",
-    "tests/test_d0_projection.py"
+    "tests/test_d0_projection.py",
+    "tests/synthetic_d0_server.py",
+    "tests/test_synthetic_d0_server.py",
+    "tests/test_d0_browse.py",
+    "tests/test_snapshot_adversarial.py",
+    "tests/test_snapshot_cursor_privacy.py"
   ],
   "development_prefixes": [
     "app/",

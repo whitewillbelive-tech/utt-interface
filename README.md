@@ -69,7 +69,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 tools/browser_check.py
 - `app/web/`: 프레임워크 없는 브라우저 ES modules. DOM `textContent` 사용, 늦은 응답 세대 검사·취소, 접근성 레이블·키보드·반응형 화면.
 - 합성 공급자는 검증된 기존 fixture 생성 함수를 이용합니다. UI 전용 합성 구성요소·관계·두 번째 출처·복제 자료는 별도로 생성합니다. 인계 fixture와 구 모듈·스키마는 그대로 보존했습니다.
 - 검색·목록은 본문 없이 페이지 단위로 전달합니다. 서버 내부 생성 자료는 SQLite `:memory:`에 보관하며 상세 원문은 요청한 한 기록에 한정합니다. 실제 전체 DB/전체 본문을 브라우저에 적재하지 않습니다.
-- 커서는 서버 실행별 HMAC과 모든 조건·정렬·페이지 크기·스냅샷에 묶입니다. 서버 재시작 또는 조건 변경 후 재사용은 거부됩니다. ID 정렬은 SQLite BINARY 순서이며 최종 ID로 동률을 해소합니다.
+- 커서는 조건·정렬·페이지 크기·스냅샷에 묶인 프로세스 내부 불투명 핸들입니다. 조건 원문은 cursor에 들어가지 않으며 15분 만료, 서버 재시작 또는 조건 변경 후 재사용은 거부됩니다. ID 정렬은 SQLite BINARY 순서이며 최종 ID로 동률을 해소합니다.
 - 합성 세션 namespace는 `utt.synthetic.session.v1`, 기록은 dataset/snapshot별로 구별합니다. 파일·실제 원장·다른 캐시를 사용하지 않습니다. 탭 종료 시 소멸하며 합성 연습 지우기 버튼을 제공합니다.
 
 실제 어댑터 설정 지점은 `ReadOnlyAdapter(transport=...)`입니다. CLI는 URL·비밀·실제 경로를 인자로 받지 않습니다. `--mode readonly --connect-env`는 07의 승인된 실행환경에 주입된 설정만 읽습니다. transport·인증·오류 처리 코드의 구현과 실제 원천 접합 증거를 구별합니다. 실제 출처 본문/locator와 관리 명령은 아직 미연결입니다. [Work 접합 계약·협업 상태](docs/WORK_INTEGRATION.md)가 현행 기준입니다.

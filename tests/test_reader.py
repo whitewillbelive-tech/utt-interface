@@ -1,7 +1,11 @@
 """Contract, provider, paging, and read-only boundary checks using only fiction."""
 import copy
+import base64
+from concurrent.futures import ThreadPoolExecutor
+import hashlib
 import json
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from app.provider import SyntheticProvider, ReadOnlyAdapter, request
 from test_synthetic_contract_schema import check, SCHEMA
@@ -52,6 +56,76 @@ class ReaderTests(unittest.TestCase):
         other=SyntheticProvider()
         try:self.assertEqual(other.read(q)['error']['code'],'VERSION_MISMATCH')
         finally:other.close()
+    def test_cursor_is_opaque_and_state_has_only_keyed_context_not_query_fingerprint(self):
+        q=request('search',**self.scope,query='가상',page_size=2)
+        token=self.p.read(q)['result']['page']['next_cursor']
+        self.assertRegex(token,r'^[A-Za-z0-9_-]{43}$')
+        self.assertEqual(len(base64.urlsafe_b64decode(token+'=')),32)
+        old_public_digest=hashlib.sha256(json.dumps({**q,'cursor':None,'ui_sort':'id_asc'},sort_keys=True).encode()).digest()
+        state=self.p._cursors[token]
+        self.assertEqual(len(state),4)
+        self.assertEqual(type(state[0]),int)
+        self.assertEqual(type(state[1]),bytes)
+        self.assertEqual(len(state[1]),32)
+        self.assertNotEqual(state[1],old_public_digest)
+        self.assertNotIn(old_public_digest,base64.urlsafe_b64decode(token+'='))
+        self.assertNotIn(q['query'],repr(self.p._cursors))
+        other=SyntheticProvider()
+        try:self.assertNotEqual(self.p._fingerprint(q,'id_asc'),other._fingerprint(q,'id_asc'))
+        finally:other.close()
+    def test_cursor_replay_and_back_navigation_reuse_handles_without_consuming(self):
+        q=request('search',**self.scope,page_size=2)
+        first=self.p.read(q)
+        second_q={**q,'cursor':first['result']['page']['next_cursor']}
+        second=self.p.read(second_q)
+        self.assertEqual(self.p.read(second_q),second)
+        self.assertEqual(self.p.read(q),first)
+        self.assertEqual(len(self.p._cursors),2)
+        self.assertEqual(self.p.read({**second_q,'query':''})['error']['code'],'VERSION_MISMATCH')
+        self.assertEqual(self.p.read({**second_q,'query':' '})['error']['code'],'VERSION_MISMATCH')
+        self.assertEqual(self.p.read(second_q),second)
+        self.assertEqual(len(self.p._cursors),2)
+    def test_cursor_ttl_is_fixed_at_issue_and_exact_expiry_is_rejected(self):
+        q=request('search',**self.scope,page_size=2)
+        with patch('app.provider.time.monotonic',return_value=100.0):
+            token=self.p.read(q)['result']['page']['next_cursor']
+        original_state=self.p._cursors[token]
+        self.assertEqual(original_state[3]-original_state[2],15*60)
+        with patch('app.provider.time.monotonic',return_value=999.0):
+            self.assertEqual(self.p.read(q)['result']['page']['next_cursor'],token)
+            self.assertEqual(self.p.read({**q,'cursor':token})['status'],'OK')
+        self.assertEqual(self.p._cursors[token],original_state)
+        with patch('app.provider.time.monotonic',return_value=1000.0):
+            expired=self.p.read({**q,'cursor':token})
+        self.assertEqual(expired['error']['code'],'VERSION_MISMATCH')
+        self.assertNotIn(token,self.p._cursors)
+    def test_cursor_capacity_is_explicit_and_does_not_evict_valid_handles(self):
+        q=request('search',**self.scope,page_size=3)
+        with patch.object(SyntheticProvider,'_MAX_CURSOR_HANDLES',1), \
+             patch('app.provider.time.monotonic',return_value=100.0):
+            first=self.p.read(q)
+            token=first['result']['page']['next_cursor']
+            original=dict(self.p._cursors)
+            blocked=self.p.read({**q,'cursor':token})
+            self.assertEqual(blocked['error']['code'],'CONNECTION_UNAVAILABLE')
+            self.assertIsNone(blocked['result'])
+            self.assertEqual(self.p._cursors,original)
+            self.assertEqual(self.p.read(q),first)
+            self.assertEqual(len(self.p._cursors),1)
+        with patch.object(SyntheticProvider,'_MAX_CURSOR_HANDLES',1), \
+             patch('app.provider.time.monotonic',return_value=1000.0):
+            replacement=self.p.read(q)['result']['page']['next_cursor']
+            self.assertNotEqual(replacement,token)
+            self.assertEqual(len(self.p._cursors),1)
+            self.assertEqual(self.p.read({**q,'cursor':token})['error']['code'],'VERSION_MISMATCH')
+    def test_concurrent_cursor_issuance_reuses_one_bounded_live_handle(self):
+        q=request('search',**self.scope,page_size=2)
+        with patch.object(SyntheticProvider,'_MAX_CURSOR_HANDLES',1):
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                results=list(pool.map(lambda _:self.p.read(q),range(8)))
+        self.assertTrue(all(result['status']=='OK' for result in results))
+        self.assertEqual(len({result['result']['page']['next_cursor'] for result in results}),1)
+        self.assertEqual(len(self.p._cursors),1)
     def test_projects_mixed_pages_and_relationship_keys(self):
         pages=self.collect('projects',page_size=1)
         self.assertEqual(len(pages),4)
