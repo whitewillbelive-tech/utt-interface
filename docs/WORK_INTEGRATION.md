@@ -263,3 +263,23 @@ Gate는 실제 고정 dataset의 **전체 입력 범위**와 파일 교체·SQLi
 이번 합성 검증 `20261105T090046Z-5ff498ce`: 전체 13단계 PASS, Python 165개, Node 46개, 기존 전체 스키마 61건, Chromium 기존 13·탐색 8·필터 7·출처 7묶음, 인계 원형 38개. 임시 가상 D0 파일과 loopback 서버로 새 native 탐색의 검색→두 페이지→상세 원형 조회를 실행했고 query/필터/정렬/원래 ID/NULL/복수 근거를 대조했다. 파일 변경·교체·재시작과 관찰 가능한 중복·누락을 시험하고, 동일 건수의 미관찰 교체는 판별할 수 없음을 확인했다. 별도 정규화 합성 이미지의 cursor 위조·문맥·만료·용량·재시작·ABA 한계를 시험했다. 시험은 커밋 전 작업트리에서 실행했으며 원격 commit tree와 비교한다. 원천 접속·보호된 환경·운영 적용의 증거가 아니다.
 
 이번 native D0 탐색·불투명 cursor 구현의 코드 기준은 `25fd6f8edb770d087c53f4809bc460327504e5cb`이다. 이후 이 문서의 상태 기록만 추가했다. 07에서 동일 코드를 실행할 수 있는 승인 환경·개발 도구 차단이 확인되면 이 SHA와 비민감 단계 결과를 대조한다. 현재는 기존 UI의 실제 D0 검색/목록/다음/상세 연결과 별도 원출처 본문이 모두 NOT_RUN이며 운영 배포도 수행하지 않았다.
+
+## 2026-11-09 — 기존 Dropbox 앱 인증 준비
+
+사용자 확인에 따르면 기존 UnifiedThinkTank 앱은 Scoped App / App Folder이며 현재 계정에 이미 연결되어 있고 파일 읽기와 수정 권한이 부여되어 있다. 이는 사용자 전달 사실이며 이 개발 환경에서 계정·앱 설정을 조회하거나 변경하지 않았다. 기존 연결일 2026-10-25, Windows 합성 UI 6/6·D0 Python 40/40·스키마 61/61·미연결 차단 PASS 역시 사용자 전달 결과이며 이번 실행 결과와 구별한다.
+
+`app/dropbox_auth.py`는 합성 전송을 주입하는 OAuth Authorization Code + PKCE 프로토콜 코어다. 요청 scope는 `files.metadata.read`와 `files.content.read` 두 개이며 추가 기존 권한을 포함하는 옵션을 보내지 않는다. 상태·만료·일회성 콜백·S256 verifier·redirect를 검사하고, **실제 토큰 응답에 적용된** scope가 정확히 두 권한이 아니거나 확인되지 않으면 거부한다. refresh token도 거부한다. 성공 세션은 메모리에서만 보유하며 파일 API, 장기 저장, 백그라운드 접근을 제공하지 않는다. 요청의 두 scope나 키 형식은 앱의 App Folder 유형을 증명하지 않는다. 코어의 합성 성공은 인증 서버의 진위, 실제 앱 식별, Windows 수용 또는 D0 호환성을 증명하지 않는다. `D0Client.read()`는 계속 `UNSUPPORTED_CONTRACT`다.
+
+실제 인증은 의도적으로 차단되어 있다. Dropbox는 authorization code를 redirect URI의 query string으로 전달한다고 문서화하며, 일반 브라우저 loopback 방식은 인증 코드가 주소 표시줄에 노출되지 않는다는 이번 요구를 보장하지 못한다. 문서화된 대체 응답 방식도 확인되지 않았다. 실제 전송·브라우저·listener는 구현하지 않았다. 또한 이미 등록된 redirect URI가 안전한 loopback URI와 정확히 일치하는지도 확인되지 않았다. 기존 앱 설정·연결을 변경하거나 우회하지 않는다. 참고: [Dropbox OAuth 안내](https://docs.dropboxapi.com/riviera/docs/guides/o-auth), [authorization 안내](https://docs.dropboxapi.com/dropbox-api/docs/get-started/authorization).
+
+합성 코어의 취소는 교환 전 상태를 닫는다. 교환 transport 호출 중에는 상태 lock을 보유하므로 진행 중 호출의 즉각 취소를 보장하지 않는다. 향후 실제 전송을 추가하기 전에 신뢰 가능한 TLS, 고정 대상·redirect 차단, 제한 시간 및 진행 중 취소를 별도로 설계·시험해야 한다.
+
+Windows에서 코드를 받은 뒤 PowerShell의 저장소 루트에서 다음 명령은 **차단 상태 확인만** 수행한다. 앱 키, 인증 코드, 토큰을 입력하거나 표시하지 않고 종료 코드 2로 끝난다. 현재 실제 사용자 인증을 시작하는 명령이나 화면 절차는 제공할 수 없다.
+
+```powershell
+py -3 -m app.dropbox_auth
+```
+
+실제 인증을 열려면 코드가 브라우저 화면에 노출되지 않는 Dropbox 지원 반환 방식과 이미 등록된 정확한 redirect의 호환성을 먼저 확인해야 한다. 이후 사용자 PC의 로컬 설정에서 기존 앱 키를 받도록 별도 안전한 실행 경로를 마련하고 실제 발급 토큰의 scope·만료를 확인해야 한다. app secret이나 refresh token은 요구하지 않는다. 실제 인증 요청, 파일 목록·내용 조회, 승인 환경 검증과 실제 검색→상세는 모두 NOT_RUN이다. Dropbox 인증이 가능해져도 위 D0 snapshot 불변성, 원본 필드/ID 대응 및 승인 실행환경 차단은 별도로 충족되어야 한다.
+
+이번 합성 회귀 검사 `20261108T183201Z-ec051f4d`는 전체 13단계 PASS, Python 180개(새 OAuth 15개 포함), Node 46개, 스키마 61건 및 기존 Chromium UI 흐름 PASS다. 합성 loopback 서버에 필요한 소켓 권한을 사용했으며 OAuth 시험은 소켓을 차단하고 가상 응답만 주입했다. 실제 Dropbox·Windows 인증 결과가 아니다. 검사 당시 작업트리에서 실행한 뒤 같은 코드 tree를 PR에 게시한다.
