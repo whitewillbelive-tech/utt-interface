@@ -41,7 +41,8 @@
     "tests/test_synthetic_d0_server.py",
     "tests/test_d0_browse.py",
     "tests/test_snapshot_adversarial.py",
-    "tests/test_snapshot_cursor_privacy.py"
+    "tests/test_snapshot_cursor_privacy.py",
+    "tests/test_dropbox_auth.py"
   ],
   "development_prefixes": [
     "app/",
