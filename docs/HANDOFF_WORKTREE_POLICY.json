@@ -33,6 +33,7 @@
     "source/tests/filter_browser.py",
     "source/tests/filter_features.test.mjs",
     "source/tests/source_browser.py",
+    "source/tests/studio_browser.py",
     "source/tests/source_client.test.mjs",
     "source/tests/source_ui_fixtures.py",
     "tests/test_d11_reader.py",

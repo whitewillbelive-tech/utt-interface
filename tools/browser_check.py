@@ -12,6 +12,12 @@ from playwright.async_api import async_playwright, expect
 
 ROOT=Path(__file__).resolve().parents[1]
 
+async def reveal_control(control):
+    await control.wait_for(state='attached')
+    for details in await control.locator('xpath=ancestor::details').all():
+        if not await details.evaluate('node => node.open'):
+            await details.locator(':scope > summary').click()
+
 async def run():
     servers=[make_source_fixture_server(),make_server(0,mode='readonly')]
     for server in servers:threading.Thread(target=server.serve_forever,daemon=True).start()
@@ -22,7 +28,7 @@ async def run():
         page=await browser.new_page(viewport={'width':1440,'height':1000})
         errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
         base=f'http://127.0.0.1:{servers[0].server_port}'
-        await page.goto(base)
+        await page.goto(base+'#library')
         await expect(page.locator('.record')).to_have_count(3)
         await expect(page.locator('#dataset')).to_contain_text('SYNTHETIC')
         await expect(page.locator('#components')).to_contain_text('가상 읽기 구성요소')
@@ -72,7 +78,7 @@ async def run():
         await page.get_by_role('button',name='관련 자료: 가상 관측',exact=True).click()
         await expect(page.locator('#detail h2')).to_have_text('가상 관측')
         await expect(page.locator('.source')).to_have_count(2)
-        await expect(page.locator('#detail > .body-text')).to_have_text(RECORD_TEXT)
+        await expect(page.locator('.body-text:not(.source-body)')).to_have_text(RECORD_TEXT)
         async with page.expect_response(lambda response: response.url.endswith('/api/source')) as source_response:
             await page.get_by_role('button',name='출처 본문 조회',exact=True).first.click()
         assert (await (await source_response.value).json())['result']['content']['text']==SOURCE_TEXT
@@ -80,11 +86,12 @@ async def run():
         assert await page.locator('pre.source-body').text_content()==SOURCE_TEXT
         await expect(page.locator('pre.source-body mark')).to_have_text('🧭 동쪽')
         await expect(page.locator('.source-verification')).to_have_text('위치 검증: VERIFIED · HASH_AND_RANGE_MATCH')
-        await expect(page.locator('#detail > .body-text')).to_have_text(RECORD_TEXT)
-        assert await page.locator('#detail > .body-text').text_content()==RECORD_TEXT
-        await expect(page.locator('#detail > .body-text mark')).to_have_count(0)
-        await expect(page.locator('#detail > .body-text')).to_contain_text('실제 대화나 문서를 사용하지 않고')
+        await expect(page.locator('.body-text:not(.source-body)')).to_have_text(RECORD_TEXT)
+        assert await page.locator('.body-text:not(.source-body)').text_content()==RECORD_TEXT
+        await expect(page.locator('.body-text:not(.source-body) mark')).to_have_count(0)
+        await expect(page.locator('.body-text:not(.source-body)')).to_contain_text('실제 대화나 문서를 사용하지 않고')
         checks.append('immutable event chain, related record navigation, multiple sources, Korean body and UTF-16 highlight')
+        await reveal_control(page.locator('#simulation-note'))
         await page.locator('#simulation-note').fill('가상의 근거를 추가 확인하는 연습')
         await page.get_by_role('button',name='합성 세션에 기록',exact=True).click()
         await expect(page.locator('.simulation ol')).to_contain_text('synthetic-session-1')
@@ -98,6 +105,7 @@ async def run():
         await expect(page.locator('#page-number')).to_have_text('1 페이지')
         await page.get_by_role('button',name='가상 관측',exact=True).click()
         await expect(page.locator('.simulation ol')).to_contain_text('synthetic-session-1')
+        await reveal_control(page.get_by_role('button',name='이 탭의 합성 연습 기록 지우기',exact=True,include_hidden=True))
         await page.get_by_role('button',name='이 탭의 합성 연습 기록 지우기',exact=True).click()
         await expect(page.locator('.simulation ol li')).to_have_count(0)
         await page.get_by_role('button',name='← 검색 결과로',exact=True).click()
@@ -119,7 +127,7 @@ async def run():
         await expect(page.locator('.record')).to_have_count(1)
         await expect(page.locator('.record-title')).to_have_text('가상 관측')
         checks.append('unassigned state, combined filters, descending order, reset, empty result and body search')
-        await page.locator('summary').click()
+        await reveal_control(page.locator('#scenario'))
         await page.locator('#scenario').select_option('stale')
         await expect(page.locator('#notice')).to_contain_text('오래된 버전')
         await expect(page.locator('.record')).to_have_count(0)
@@ -177,7 +185,7 @@ async def run():
         await page.screenshot(path=str(artifacts/'reader-mobile.png'),full_page=True)
         checks.append('keyboard submit and tab navigation; desktop and 390px layout without horizontal overflow')
         readonly=f'http://127.0.0.1:{servers[1].server_port}'
-        await page.goto(readonly)
+        await page.goto(readonly+'#library')
         await expect(page.locator('#notice')).to_contain_text('CONNECTION_UNAVAILABLE')
         await expect(page.locator('#mode')).to_contain_text('미연결')
         await expect(page.locator('.record')).to_have_count(0)

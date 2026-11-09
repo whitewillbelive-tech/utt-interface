@@ -39,6 +39,7 @@ def main():
         [sys.executable,'source/tests/ui_navigation_browser.py'],
         [sys.executable,'source/tests/filter_browser.py'],
         [sys.executable,'source/tests/source_browser.py'],
+        [sys.executable,'source/tests/studio_browser.py'],
         ['git','diff','--check'],
     ]
     report={'run_id':run_id,'commit':output(['git','rev-parse','HEAD']),
