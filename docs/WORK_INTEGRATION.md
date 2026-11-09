@@ -310,3 +310,27 @@ py -3 -m app.dropbox_windows
 토큰 HTTPS의 10초 제한은 개별 소켓 동작의 대기 제한이며 전체 교환의 절대 시간 제한은 아니다. 교환 전에 콜백 listener는 닫는다. Ctrl+C는 실행 취소용이며, 실제 Windows·Dropbox에서의 브라우저, 방화벽, TLS 및 취소 동작은 사용자가 해당 PC에서 확인하기 전까지 미검증이다.
 
 합성 전체 회귀 검사 `20261109T080306Z-8ad14809`: 13단계 PASS, Python 200개(Windows OAuth 합성 20개 포함), Node 46개, 스키마 61건 및 Chromium UI 흐름 PASS. 로컬 127.0.0.1 합성 브라우저·서버와 가짜 토큰 응답, 모의 TLS transport만 사용했으며 실제 Windows 실행이나 Dropbox 요청의 증거가 아니다. 시험은 변경 작업트리에서 수행했으며 게시할 코드 tree를 대조한다.
+
+## 2026-11-09 — 신규 작업실 UI 통합
+
+09 UI 기준 `8f83863818ab111039ff3d5ba53a7465b2f4c63f`은 main `a313207f4173bfec850bdd94fcffa2682b90a79c`의 직접 후속이며 [PR #11](https://github.com/whitewillbelive-tech/utt-interface/pull/11)로 통합한다. 작업실 홈·프로젝트 탐색·자료실·대화형 보기·반응형 배치를 제공한다. 검색·페이지·상세·출처는 기존 읽기 API 및 출처 검증을 재사용한다. 뷰 사이의 브라우저 뒤로 가기를 지원하며, 상세/출처는 별도 브라우저 이력 항목이 아니므로 화면의 `← 검색 결과로` 버튼으로 목록과 이전 페이지·초점으로 돌아간다. 이는 기존 상세 이력 범위와 같다. 별도 UI 데이터 API·실제 연결·승인·저장 기능을 추가하지 않았다. Dropbox OAuth 구현도 변경하지 않는다.
+
+대화형 보기는 합성 모드의 고정 가상 예시만 표시한다. 표시용 지역 모델은 `topic`, `discussion`, `userOpinion`, `aiOpinion`, `conclusion`, `status`, `messages[{speaker,text}]`, `metadata`를 사용한다. 사용자에 따르면 Work의 `conversation_readability_projection_2026_11_09`는 `UTT-CONVERSATION-VIEW/0.1-draft`이며 실제 대화를 변환한 자료가 아니다. 이 개발 환경에서는 Library 원문을 찾거나 읽지 못했으므로 초안의 필드·중첩·NULL 의미와 위 UI 모델의 구조적 차이는 **미확인**이다. 이름이 비슷하다는 이유로 필드를 대응하거나 호환을 주장하지 않는다. UI 모델은 초안 스키마·파서·변환기·실제 대화 API가 아니며 실제 대화 연결과 원본 검수는 NOT_RUN이다.
+
+`source/tests/studio_browser.py`는 원형 검증 허용 파일 목록과 `tools/run_checks.py`에 등록했다. 작업실 집계, 검색·페이지·상세·출처·목록 복귀, 뒤로 가기·지연 응답, 미연결·미지원 필터, 합성 대화 escaping, 데스크톱·모바일 배치를 가상 자료로 검증한다. 합성 fixture는 실제 DB·대화·원장을 열지 않는다. 실제 Windows 사용자 검수·운영 데이터 검증은 별개다.
+
+Windows 수동 검수에는 Python 3.11 이상과 설치된 프로젝트 의존성을 사용한다. PowerShell에서 저장소 루트로 이동한 뒤 다음 합성 fixture 서버를 실행하고 출력되는 `http://127.0.0.1:...`을 브라우저에서 연다. 기본 합성 서버는 출처 본문 공급자를 주입하지 않으므로 출처 열기 시연에는 이 가상 fixture가 필요하다. 종료는 Ctrl+C다.
+
+```powershell
+py -3 -c "from source.tests.source_ui_fixtures import make_source_fixture_server; s=make_source_fixture_server(); print('http://127.0.0.1:'+str(s.server_port), flush=True); s.serve_forever()"
+```
+
+홈·프로젝트에서 자료실로 이동해 가상 검색과 다음 페이지·상세를 열고 `출처 본문 조회`와 `← 검색 결과로`를 확인한다. 작업실·자료실·대화형 보기 사이의 브라우저 뒤로 가기와 합성 대화 표시도 확인한다. 화면을 좁혀 모바일 폭도 확인한다. 이어서 다음 명령으로 `http://127.0.0.1:8767`을 열어 읽기 전용 미연결 상태와 대화 시연 비활성화를 확인한다. `--connect-env`는 사용하지 않는다.
+
+```powershell
+py -3 -m app.server --mode readonly --port 8767
+```
+
+공식 Chromium runner는 `/usr/bin/chromium`을 사용하는 Linux 시험이다. 위 Windows 절차는 사용자 수동 검수 방법이며 이번 개발 환경에서의 Windows 실행 결과가 아니다.
+
+공식 합성 검증 `20261109T101349Z-aee713e6`: 전체 14단계 PASS, Python 200개, Node 46개, 스키마 61건, 기존 Chromium 흐름 및 신규 작업실 7개 검증 묶음 PASS. 이 실행은 UI 기준 커밋에 runner·허용 목록을 적용한 작업트리에서 수행했으며, 실제 자료나 Windows 수용 검사가 아니다. 합성 데스크톱·모바일 캡처도 확인했다.
