@@ -1,9 +1,8 @@
-"""Dropbox scoped OAuth primitives; no browser, listener, file APIs, or token storage.
+"""Dropbox scoped OAuth primitives; no browser, listener, file APIs, or disk storage.
 
-A host may integrate these only after it can keep the OAuth callback URL out of
-browser display/history. Ordinary browser loopback redirects do not establish
-that property. The production flow therefore has no entry point in this module.
-All examples and calls in the development environment must use fake transport.
+Windows integration is in ``app.dropbox_windows``. Browser loopback redirects
+can briefly display the authorization code; they cannot guarantee its absence
+from browser history. Development tests use fake transport only.
 """
 from __future__ import annotations
 
@@ -46,12 +45,13 @@ def _redirect(value: str) -> tuple[str, str]:
     if (u.scheme != "http" or u.hostname not in ("localhost", "127.0.0.1")
             or not port or not 1024 <= port <= 65535 or u.username is not None
             or u.password is not None or u.query or u.fragment
-            or not u.path.startswith("/") or u.path.startswith("//")
+            or (u.path and not u.path.startswith("/")) or u.path.startswith("//")
+            or any(segment in (".", "..") for segment in u.path.split("/"))
             or "%" in u.path or "\\" in u.path or "//" in u.path
             or any(not 0x21 <= ord(c) <= 0x7e for c in value)
             or u.netloc not in (f"localhost:{port}", f"127.0.0.1:{port}")):
         raise OAuthError("INVALID_REDIRECT")
-    return value, u.path
+    return value, u.path or "/"
 
 
 def _challenge(verifier: str) -> str:
@@ -203,6 +203,8 @@ class AuthAttempt:
             raise OAuthError("SCOPE_REJECTED")
         if (result.get("token_type", "").lower() != "bearer" if isinstance(result.get("token_type"), str) else True):
             raise OAuthError("INVALID_TOKEN_RESPONSE")
+        if isinstance(ttl, str) and 1 <= len(ttl) <= 5 and all('0' <= c <= '9' for c in ttl):
+            ttl = int(ttl)
         if (not isinstance(token, str) or not token or len(token) > 8192
                 or any(ord(c) < 33 or ord(c) > 126 for c in token)
                 or isinstance(ttl, bool) or not isinstance(ttl, int)
@@ -223,9 +225,8 @@ class AuthAttempt:
 
 
 def main() -> int:
-    # Deliberately do not read local configuration or launch a browser until a
-    # callback mechanism that keeps the authorization code off-screen exists.
-    print("Dropbox authentication is unavailable: a secure Windows callback has not been verified.")
+    # The core is not itself a user-facing flow; read no local configuration.
+    print("Authorization is unavailable in this core; use the Windows-only app.dropbox_windows entrypoint.")
     return 2
 
 
