@@ -264,7 +264,7 @@ Gate는 실제 고정 dataset의 **전체 입력 범위**와 파일 교체·SQLi
 
 이번 native D0 탐색·불투명 cursor 구현의 코드 기준은 `25fd6f8edb770d087c53f4809bc460327504e5cb`이다. 이후 이 문서의 상태 기록만 추가했다. 07에서 동일 코드를 실행할 수 있는 승인 환경·개발 도구 차단이 확인되면 이 SHA와 비민감 단계 결과를 대조한다. 현재는 기존 UI의 실제 D0 검색/목록/다음/상세 연결과 별도 원출처 본문이 모두 NOT_RUN이며 운영 배포도 수행하지 않았다.
 
-## 2026-11-09 — 기존 Dropbox 앱 인증 준비
+## 2026-11-09 — 기존 Dropbox 앱 인증 준비 (PR #9 당시 상태)
 
 사용자 확인에 따르면 기존 UnifiedThinkTank 앱은 Scoped App / App Folder이며 현재 계정에 이미 연결되어 있고 파일 읽기와 수정 권한이 부여되어 있다. 이는 사용자 전달 사실이며 이 개발 환경에서 계정·앱 설정을 조회하거나 변경하지 않았다. 기존 연결일 2026-10-25, Windows 합성 UI 6/6·D0 Python 40/40·스키마 61/61·미연결 차단 PASS 역시 사용자 전달 결과이며 이번 실행 결과와 구별한다.
 
@@ -283,3 +283,30 @@ py -3 -m app.dropbox_auth
 실제 인증을 열려면 코드가 브라우저 화면에 노출되지 않는 Dropbox 지원 반환 방식과 이미 등록된 정확한 redirect의 호환성을 먼저 확인해야 한다. 이후 사용자 PC의 로컬 설정에서 기존 앱 키를 받도록 별도 안전한 실행 경로를 마련하고 실제 발급 토큰의 scope·만료를 확인해야 한다. app secret이나 refresh token은 요구하지 않는다. 실제 인증 요청, 파일 목록·내용 조회, 승인 환경 검증과 실제 검색→상세는 모두 NOT_RUN이다. Dropbox 인증이 가능해져도 위 D0 snapshot 불변성, 원본 필드/ID 대응 및 승인 실행환경 차단은 별도로 충족되어야 한다.
 
 이번 합성 회귀 검사 `20261108T183201Z-ec051f4d`는 전체 13단계 PASS, Python 180개(새 OAuth 15개 포함), Node 46개, 스키마 61건 및 기존 Chromium UI 흐름 PASS다. 합성 loopback 서버에 필요한 소켓 권한을 사용했으며 OAuth 시험은 소켓을 차단하고 가상 응답만 주입했다. 실제 Dropbox·Windows 인증 결과가 아니다. 검사 당시 작업트리에서 실행한 뒤 같은 코드 tree를 PR에 게시한다.
+
+## 2026-11-09 — Windows Dropbox 사용자 인증 프로그램
+
+이 절은 바로 위 PR #9 당시의 실제 인증 차단 상태를 갱신한다. 사용자의 후속 지시에 따라 authorization code가 loopback redirect URL에 일시적으로 포함되는 것을 허용한다. `app/dropbox_windows.py`는 명시적으로 시작한 1회 인증에만 PKCE 코어를 사용한다. Dropbox HTTPS 토큰 endpoint에 대한 TLS 인증서 검증을 수행하고 프록시와 HTTP redirect를 사용하지 않는다. 127.0.0.1에만 bind하며 요청의 peer·Host·경로, state와 verifier를 검사한다. callback에 대해서는 query 없는 로컬 완료 경로로 303 이동하고 no-store·no-referrer 헤더를 보낸다. 토큰 응답이 정확히 두 읽기 scope를 나타내지 않거나 refresh token이 있으면 거부한다. 실제 토큰은 메모리에만 두고 상태 출력 후 폐기한다. 파일 목록·본문·D0·원장 API는 호출하지 않는다.
+
+**사용자가 PC에서 먼저 확인할 설정:** 기존 UnifiedThinkTank 앱의 Dropbox 개발자 콘솔에 이미 등록된 redirect URI를 확인한다. 코드는 `http://127.0.0.1:포트` 또는 그 뒤에 명시적 경로가 붙은 HTTP URI만 지원하며, 포트는 1024–65535다. 경로는 ASCII여야 하고 `%` 인코딩·역슬래시·연속 슬래시·`.` 또는 `..` 경로 구성요소를 지원하지 않으며 query나 fragment도 허용하지 않는다. 등록된 문자열과 포트·경로를 포함해 정확히 같아야 한다. 설정을 추가하거나 수정하지 않는다. 다른 호스트·형식만 등록돼 있다면 현재 프로그램은 인증을 시작할 수 없다. 프로그램은 Dropbox 콘솔을 조회하지 않으므로 두 로컬 입력이 서로 같다는 사실만 검사한다. 입력이 실제 등록값인지에 대한 확인은 사용자에게 달려 있으며, Dropbox의 최종 확인을 대체하지 않는다.
+
+Windows의 Python 3.11 이상 PowerShell에서 저장소 루트로 이동해 다음 진단을 실행한다. 사용자 조작으로 가상 코드가 포함된 **로컬** URL만 브라우저에서 열어 지정 경로·포트와 완료 페이지를 확인한다. 외부 Dropbox 인증·토큰·파일 요청은 하지 않는다. 포트 사용 중, 방화벽 또는 브라우저 설정으로 실패하면 해당 PC에서 로컬 원인을 확인한다.
+
+```powershell
+py -3 -m unittest discover -s tests -p test_dropbox_windows.py -v
+py -3 -m app.dropbox_windows --diagnose
+```
+
+진단 직후에는 Windows의 `SO_EXCLUSIVEADDRUSE`와 연결 종료 상태 때문에 같은 포트의 실제 인증에서 일시적으로 `CALLBACK_UNAVAILABLE`이 발생할 수 있다. 그 경우 잠시 기다린 뒤 동일한 등록 포트로 다시 시도한다. 임의의 다른 포트로 바꾸거나 포트 독점 보호를 우회하지 않는다.
+
+추후 사용자가 실제 인증을 직접 시작할 때는 같은 위치에서 다음 명령을 실행한다. 로컬 redirect URI와 콘솔에서 확인한 기존 등록 URI를 각각 입력하고, 기존 UnifiedThinkTank App Folder 앱의 키임을 직접 확인해 숨김 입력한 뒤 `START`를 입력한다. 이 프로그램은 앱 키의 소유 앱이나 App Folder 유형을 독립적으로 식별하지 못한다. 브라우저의 Dropbox 화면에서 요청된 두 읽기 권한을 확인하고 승인하거나 취소한다. app secret은 입력하지 않는다. 완료 후 터미널에는 확인된 scope와 남은 만료 시간만 표시하며 세션은 종료된다.
+
+```powershell
+py -3 -m app.dropbox_windows
+```
+
+브라우저 주소 표시줄이나 방문 기록에 callback query의 인증 코드가 잠깐 나타나거나 남을 가능성을 완전히 없애지는 못한다. 공유 PC와 브라우저 확장 프로그램 등 같은 사용자 환경의 접근도 별도 고려해야 한다. 앱 권한이나 기존 연결은 변경하지 않는다. 승인 환경과 실제 발급 토큰에 대한 실행은 이번 개발에서 NOT_RUN이며, 성공적인 인증도 실제 D0 자료의 호환성이나 위 snapshot·ID·환경 차단 해소의 증거가 아니다. `D0Client.read()`는 계속 `UNSUPPORTED_CONTRACT`다.
+
+토큰 HTTPS의 10초 제한은 개별 소켓 동작의 대기 제한이며 전체 교환의 절대 시간 제한은 아니다. 교환 전에 콜백 listener는 닫는다. Ctrl+C는 실행 취소용이며, 실제 Windows·Dropbox에서의 브라우저, 방화벽, TLS 및 취소 동작은 사용자가 해당 PC에서 확인하기 전까지 미검증이다.
+
+합성 전체 회귀 검사 `20261109T080306Z-8ad14809`: 13단계 PASS, Python 200개(Windows OAuth 합성 20개 포함), Node 46개, 스키마 61건 및 Chromium UI 흐름 PASS. 로컬 127.0.0.1 합성 브라우저·서버와 가짜 토큰 응답, 모의 TLS transport만 사용했으며 실제 Windows 실행이나 Dropbox 요청의 증거가 아니다. 시험은 변경 작업트리에서 수행했으며 게시할 코드 tree를 대조한다.
