@@ -41,7 +41,7 @@ async def check_http_errors(browser, base):
         page = await browser.new_page()
         try:
             await page.route('**/api/read', lambda route: route.fulfill(status=status, json={'error': 'fictional rejection'}))
-            await page.goto(base)
+            await page.goto(base+'#library')
             await expect(page.locator('#notice')).to_contain_text(code)
             await expect(page.locator('.record')).to_have_count(0)
             if status in (401, 403):
@@ -51,7 +51,7 @@ async def check_http_errors(browser, base):
     page = await browser.new_page()
     try:
         await page.route('**/api/read', lambda route: route.abort('failed'))
-        await page.goto(base)
+        await page.goto(base+'#library')
         await expect(page.locator('#notice')).to_contain_text('CONNECTION_UNAVAILABLE')
         await expect(page.locator('.record')).to_have_count(0)
     finally:
@@ -64,7 +64,7 @@ async def check_mode_denial(browser, base):
     try:
         page.on('request', lambda req: reads.append(req.url) if req.url.endswith('/api/read') else None)
         await page.route('**/api/mode', lambda route: route.fulfill(status=403, json={'error': 'fictional rejection'}))
-        await page.goto(base)
+        await page.goto(base+'#library')
         await expect(page.locator('#notice')).to_contain_text('ACCESS_DENIED')
         await expect(page.locator('.record')).to_have_count(0)
         assert not reads, 'A denied mode probe must not continue into read or synthetic success.'
@@ -88,7 +88,7 @@ async def check_capabilities(browser, base):
                     return await route.fulfill(response=response, json=data)
                 return await route.continue_()
             await page.route('**/api/read', capabilities)
-            await page.goto(base)
+            await page.goto(base+'#library')
             await wait_for_list(page, maximum)
             assert all(operation in operations for operation, _ in sent), sent
             assert all(size <= maximum for operation, size in sent if operation != 'capabilities'), sent
@@ -116,7 +116,7 @@ async def check_capabilities(browser, base):
                     return await route.fulfill(response=response, json=data)
                 return await route.continue_()
             await page.route('**/api/read', limited_operations)
-            await page.goto(base)
+            await page.goto(base+'#library')
             if can_search:
                 await wait_for_list(page)
                 await expect(page.locator('#project')).to_be_disabled()
@@ -149,7 +149,7 @@ async def check_history_availability(browser, base):
                 data['result'].update(history_status=status, events=[], relations=[], related_records=[])
                 return await route.fulfill(response=response, json=data)
             await page.route('**/api/read', unavailable)
-            await page.goto(base)
+            await page.goto(base+'#library')
             await wait_for_list(page)
             await open_observation(page)
             await expect(page.locator('#detail')).to_contain_text('이력 상태: ' + expected)
@@ -163,7 +163,7 @@ async def check_history_availability(browser, base):
                 return await route.fulfill(json=error('detail', 'ITEM_NOT_FOUND'))
             return await route.continue_()
         await page.route('**/api/read', missing_detail)
-        await page.goto(base)
+        await page.goto(base+'#library')
         await wait_for_list(page)
         await page.get_by_role('button', name='가상 관측', exact=True).click()
         await expect(page.locator('#notice')).to_contain_text('ITEM_NOT_FOUND')
@@ -188,7 +188,7 @@ async def check_history_retry(browser, base):
                     return await route.fulfill(status=403, json={'error': 'fictional denial'})
             return await route.continue_()
         await page.route('**/api/read', retry_history)
-        await page.goto(base)
+        await page.goto(base+'#library')
         await wait_for_list(page, 2)
         await page.locator('#search').fill('가상 이력')
         await wait_for_list(page, 1)
@@ -211,12 +211,12 @@ async def check_history_retry(browser, base):
                 return await route.fulfill(status=403, json={'error': 'fictional denial'})
             return await route.continue_()
         await page.route('**/api/read', initial_history_denial)
-        await page.goto(base)
+        await page.goto(base+'#library')
         await wait_for_list(page)
         await open_observation(page)
         await expect(page.get_by_role('button', name='이력 다시 시도', exact=True)).to_be_enabled()
         await expect(page.locator('#notice')).to_contain_text('ACCESS_DENIED')
-        assert '상세 조회 완료' not in await page.locator('#notice').inner_text()
+        assert '자료를 읽고 있습니다.' not in await page.locator('#notice').inner_text()
     finally:
         await page.close()
 
@@ -239,7 +239,7 @@ async def check_relation_targets(browser, base):
                     relation['from_id'], relation['to_id'] = relation['to_id'], relation['from_id']
                 return await route.fulfill(response=response, json=data)
             await page.route('**/api/read', relation_target)
-            await page.goto(base)
+            await page.goto(base+'#library')
             await wait_for_list(page)
             await open_observation(page)
             if kind == 'reverse':
@@ -282,7 +282,7 @@ async def check_readonly_boundary(browser, base, readonly):
                 search_filters.append((payload['request']['document_role'], payload['request']['review_status']))
             return await route.continue_()
         await page.route('**/api/read', descending_sort)
-        await page.goto(base)
+        await page.goto(base+'#library')
         await wait_for_list(page)
         await expect(page.locator('#sort')).to_have_value('id_desc')
         await expect(page.locator('#role')).to_be_disabled()
@@ -303,12 +303,12 @@ async def check_readonly_boundary(browser, base, readonly):
         await open_observation(page)
         await expect(page.locator('#detail')).to_contain_text('이력 상태:')
         await expect(page.locator('.simulation')).to_have_count(0)
-        assert '합성 상세 조회 완료' not in await page.locator('#notice').inner_text()
+        assert '합성 자료를 읽고 있습니다.' not in await page.locator('#notice').inner_text()
     finally:
         await page.close()
     page = await browser.new_page()
     try:
-        await page.goto(readonly)
+        await page.goto(readonly+'#library')
         await expect(page.locator('#notice')).to_contain_text('CONNECTION_UNAVAILABLE')
         await expect(page.locator('.record')).to_have_count(0)
         await expect(page.locator('.simulation')).to_have_count(0)
@@ -319,7 +319,7 @@ async def check_readonly_boundary(browser, base, readonly):
 async def check_mobile_return(browser, base):
     page = await browser.new_page(viewport={'width': 390, 'height': 844})
     try:
-        await page.goto(base)
+        await page.goto(base+'#library')
         await wait_for_list(page)
         await page.locator('#search').fill('가상')
         await page.locator('#role').select_option('SYNTHETIC_NOTE')
@@ -333,7 +333,7 @@ async def check_mobile_return(browser, base):
         await origin.press('Enter')
         await page.get_by_role('button', name='관련 자료: 가상 관측', exact=True).click()
         await expect(page.locator('#detail h2')).to_have_text('가상 관측')
-        await expect(page.locator('#detail > .body-text')).to_have_text(RECORD_TEXT)
+        await expect(page.locator('.body-text:not(.source-body)')).to_have_text(RECORD_TEXT)
         async with page.expect_response(lambda response: response.url.endswith('/api/source')) as source_response:
             await page.get_by_role('button', name='출처 본문 조회', exact=True).first.click()
         assert (await (await source_response.value).json())['result']['content']['text'] == SOURCE_TEXT
@@ -341,9 +341,9 @@ async def check_mobile_return(browser, base):
         assert await page.locator('pre.source-body').text_content() == SOURCE_TEXT
         await expect(page.locator('pre.source-body mark')).to_have_text('🧭 동쪽')
         await expect(page.locator('.source-verification')).to_have_text('위치 검증: VERIFIED · HASH_AND_RANGE_MATCH')
-        await expect(page.locator('#detail > .body-text')).to_have_text(RECORD_TEXT)
-        assert await page.locator('#detail > .body-text').text_content() == RECORD_TEXT
-        await expect(page.locator('#detail > .body-text mark')).to_have_count(0)
+        await expect(page.locator('.body-text:not(.source-body)')).to_have_text(RECORD_TEXT)
+        assert await page.locator('.body-text:not(.source-body)').text_content() == RECORD_TEXT
+        await expect(page.locator('.body-text:not(.source-body) mark')).to_have_count(0)
         assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         await page.get_by_role('button', name='← 검색 결과로', exact=True).click()
         await expect(origin).to_be_focused()

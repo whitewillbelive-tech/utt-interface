@@ -1,14 +1,134 @@
 <!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UTT · 연구와 창작의 서가</title><link rel="stylesheet" href="/style.css"><script type="module" src="/app.mjs"></script></head>
-<body><a class="skip" href="#search">검색으로 건너뛰기</a>
-<div class="modebar"><strong id="mode">연결 확인 중 · 운영 승인 없음</strong><span>읽기 전용 / UTT ACCESS READ 초안</span></div>
-<header><div><span class="eyebrow">UNIFIED THINK TANK</span><h1>연구와 창작의 서가</h1><p>프로젝트의 맥락에서 찾고, 출처의 근거로 읽습니다.</p></div><button id="reconnect" type="button">기준 다시 조회</button></header>
-<main><aside aria-labelledby="browse-title"><h2 id="browse-title">탐색</h2><section><p class="eyebrow">PROJECTS & CONTEXT</p><div id="projects"></div></section><section><h3>구성요소</h3><div id="components"></div></section><div class="dataset"><h3>현재 데이터셋</h3><p id="dataset">연결 확인 중…</p><p id="connection-state">공급자: 확인 중<br>실제 정본: 미확인</p></div><details id="synthetic-scenarios" hidden><summary>개발 시나리오</summary><label>읽기 응답<select id="scenario"><option value="normal">정상 합성 응답</option><option value="stale">오래된 버전</option><option value="connection">연결 실패</option></select></label></details></aside>
-<section class="workspace" aria-labelledby="workspace-title"><div class="section-top"><div><span class="eyebrow">LIBRARY / 통합 열람</span><h2 id="workspace-title">자료 찾기</h2></div><span id="dataset-kind" class="pill">미연결</span></div>
-<form id="filters"><label class="query">검색어<input id="search" type="search" placeholder="제목 또는 제공된 본문 검색" autocomplete="off"></label><button type="submit" class="primary">검색</button>
-<div class="filter-row"><label>프로젝트<select id="project"><option value="">전체 프로젝트 · 미분류 포함</option></select></label><label>자료 유형<select id="role"><option value="">모든 유형</option><option value="SYNTHETIC_NOTE">합성 노트</option></select></label><label>검토 상태<select id="review"><option value="">모든 검토 상태</option><option value="UNREVIEWED">미검토</option><option value="HELD">보류</option><option value="EVIDENCE_REQUESTED">근거 요청</option><option value="CANCELLED">취소</option></select></label><label>정렬<select id="sort"><option value="id_asc">자료 ID 오름차순</option><option value="id_desc">자료 ID 내림차순</option></select></label><button type="reset">필터 초기화</button></div><p id="filter-support" class="muted">자료 유형·검토 상태 필터 지원 확인 중</p></form>
-<div id="notice" role="status" aria-live="polite"></div>
-<div id="list-view"><div class="results-header"><h3>검색 결과</h3><span id="count"></span></div><div id="results" aria-busy="false"></div><nav class="pagination" aria-label="검색 결과 페이지"><button id="prev" disabled>이전 페이지</button><span id="page-number">1 페이지</span><button id="next" disabled>다음 페이지</button></nav></div>
-<section id="detail" tabindex="-1" hidden aria-label="자료 상세"></section>
-<section class="limits"><h3>연결 범위</h3><p>이 화면은 읽기 공급자의 지원 범위에서 동작합니다. 기존 A 검색·D-0 검토·D-1 이력의 흐름을 참조합니다. C 파일 미리보기, D-1.1 원장 정정·복원, D-2 영향 분석·일괄 제안은 원형 의존성과 명령 계약이 미인계되어 지원하지 않습니다.</p><p>실제 승인·정본 변경·동기화는 제공하지 않습니다.</p></section>
-</section></main><footer>UTT · 읽기 작업 공간 / 실제 정본 검증·운영 승인은 별도 실행 환경에서 확인합니다.</footer></body></html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>UTT · 생각을 펼치는 작업실</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.mjs"></script>
+</head>
+<body>
+  <a class="skip" href="#home-heading">본문으로 건너뛰기</a>
+  <div class="studio-shell">
+    <aside class="studio-sidebar" aria-label="작업실 탐색">
+      <a class="brand" href="#studio" aria-label="UTT 작업실 홈">
+        <span class="brand-mark" aria-hidden="true">u<span>tt</span>.</span>
+        <span class="brand-name">UNIFIED THINK TANK<span>나의 연구와 창작 작업실</span></span>
+      </a>
+      <nav class="studio-nav" aria-label="주요 화면">
+        <button id="nav-home" type="button" aria-controls="studio-home" aria-current="page">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10H3zM9 20v-7h6v7"/></svg><span>작업실</span>
+        </button>
+        <button id="nav-library" type="button" aria-controls="library-view">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h4v16H4zM10 4h4v16h-4zM16 5l4-1 3 15-4 1z"/></svg><span>자료 찾기</span>
+        </button>
+        <button id="nav-conversations" type="button" aria-controls="conversations-view">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4zM8 8h8M8 12h5"/></svg><span>대화형 보기</span>
+        </button>
+      </nav>
+      <details class="sidebar-context" id="project-context" open>
+        <summary>프로젝트 둘러보기</summary>
+        <div id="projects" class="sidebar-projects"></div>
+        <details class="component-context">
+          <summary>연결된 구성요소</summary>
+          <div id="components"></div>
+        </details>
+      </details>
+      <div class="sidebar-bottom">
+        <div class="connection-summary"><span class="status-dot" aria-hidden="true"></span><strong id="mode">연결 확인 중 · 운영 승인 없음</strong></div>
+        <details id="connection-details" class="connection-details">
+          <summary>자료 연결 정보</summary>
+          <div class="dataset">
+            <span id="dataset-kind" class="pill">미연결</span>
+            <p id="dataset">연결 확인 중…</p>
+            <p id="connection-state">공급자: 확인 중<br>실제 정본: 미확인</p>
+          </div>
+          <p class="muted">읽기 전용 · UTT ACCESS READ 초안</p>
+          <details id="synthetic-scenarios" hidden>
+            <summary>개발 시나리오</summary>
+            <label>읽기 응답
+              <select id="scenario"><option value="normal">정상 합성 응답</option><option value="stale">오래된 버전</option><option value="connection">연결 실패</option></select>
+            </label>
+          </details>
+        </details>
+        <button id="reconnect" class="quiet-button" type="button">자료 연결 다시 확인</button>
+      </div>
+    </aside>
+
+    <main class="workspace" id="main-content">
+      <header class="workspace-header">
+        <p class="workspace-caption"><span class="caption-line" aria-hidden="true"></span>PERSONAL WORKSPACE</p>
+        <a class="header-search" href="#library"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg>자료 찾아보기</a>
+      </header>
+      <div id="notice" role="status" aria-live="polite"></div>
+
+      <section id="studio-home" class="studio-home" aria-labelledby="home-heading">
+        <div class="studio-hero">
+          <div class="hero-copy">
+            <p class="eyebrow">YOUR THOUGHTS, IN GOOD COMPANY</p>
+            <h1 id="home-heading" tabindex="-1">생각을 펼치는<br><span>나의 작업실</span></h1>
+            <p class="hero-description">흩어진 자료를 살펴보고, 맥락을 따라 읽고,<br class="desktop-break"> 다음 생각으로 이어가는 곳.</p>
+            <a class="primary hero-action" href="#library">자료 찾기 <span aria-hidden="true">↗</span></a>
+          </div>
+          <div class="hero-note" aria-label="작업실의 읽기 방식">
+            <span class="note-index">작업실 노트</span>
+            <p>하나의 자료에서<br>새로운 연결을<br>발견하는 시간.</p>
+            <span class="note-rule" aria-hidden="true"></span>
+            <span class="note-foot">찾기 · 읽기 · 연결하기</span>
+          </div>
+        </div>
+        <div class="studio-grid">
+          <section class="studio-card projects-card" aria-labelledby="home-projects-heading">
+            <div class="card-heading"><div><p class="eyebrow">PROJECTS</p><h2 id="home-projects-heading">프로젝트 둘러보기</h2></div><a href="#library" class="subtle-link">서가 열기 <span aria-hidden="true">↗</span></a></div>
+            <div id="home-projects" class="home-project-grid"><p class="muted">연결된 프로젝트를 확인하는 중입니다.</p></div>
+          </section>
+          <section class="studio-card continue-card" aria-labelledby="home-continue-heading">
+            <div class="card-heading"><div><p class="eyebrow">PICK UP A THREAD</p><h2 id="home-continue-heading">이어 읽기</h2></div><span class="card-symbol" aria-hidden="true">↗</span></div>
+            <div id="home-continue"><p class="empty-copy">이 탭에서 살펴본 자료를 다시 찾아갈 수 있습니다.</p></div>
+          </section>
+          <section class="studio-card review-card" aria-labelledby="home-review-heading">
+            <div class="card-heading"><div><p class="eyebrow">A CLOSER LOOK</p><h2 id="home-review-heading">한 번 더 살펴볼 자료</h2></div><span class="card-symbol clay" aria-hidden="true">◌</span></div>
+            <div id="home-review"><p class="empty-copy">검토 상태를 확인하는 중입니다.</p></div>
+          </section>
+          <section class="studio-card discussions-card" aria-labelledby="home-discussions-heading">
+            <div class="card-heading"><div><p class="eyebrow">IDEAS IN CONVERSATION</p><h2 id="home-discussions-heading">대화의 흐름으로 읽기</h2></div><a href="#conversations" class="subtle-link">보기 살펴보기 <span aria-hidden="true">↗</span></a></div>
+            <div id="home-discussions"><p class="empty-copy">대화형 보기의 연결 상태를 확인하는 중입니다.</p></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="library-view" class="library-view" aria-labelledby="workspace-title" hidden>
+        <div class="view-header"><div><p class="eyebrow">THE LIBRARY</p><h1 id="workspace-title" tabindex="-1">자료 찾기</h1><p>프로젝트의 맥락에서 찾고, 출처의 근거로 읽습니다.</p></div><span class="view-marker" aria-hidden="true">읽고, 연결하고.</span></div>
+        <p class="browse-guidance muted">주제 분류는 연결 전입니다. 지원되는 검색어로 관련 자료를 찾아보세요. 자료 종류는 제공된 분류만 표시합니다.</p>
+        <form id="filters">
+          <div class="search-row"><label class="query">자료 검색<input id="search" type="search" placeholder="찾고 싶은 제목이나 내용을 입력하세요" autocomplete="off"></label><button type="submit" class="primary">검색</button></div>
+          <details id="filter-details" class="filter-details" open>
+            <summary>검색 범위와 필터</summary>
+            <div class="filter-row">
+              <label>프로젝트<select id="project"><option value="">전체 프로젝트 · 미분류 포함</option></select></label>
+              <label>자료 유형<select id="role"><option value="">모든 유형</option><option value="SYNTHETIC_NOTE">합성 노트</option></select></label>
+              <label>검토 상태<select id="review"><option value="">모든 검토 상태</option><option value="UNREVIEWED">미검토</option><option value="HELD">보류</option><option value="EVIDENCE_REQUESTED">근거 요청</option><option value="CANCELLED">취소</option></select></label>
+              <label>정렬<select id="sort"><option value="id_asc">자료 ID 오름차순</option><option value="id_desc">자료 ID 내림차순</option></select></label>
+              <button type="reset" class="quiet-button">필터 초기화</button>
+            </div>
+            <p id="filter-support" class="muted">자료 유형·검토 상태 필터 지원 확인 중</p>
+          </details>
+        </form>
+        <div id="list-view">
+          <div class="results-header"><h2>검색 결과</h2><span id="count"></span></div>
+          <div id="results" aria-busy="false"></div>
+          <nav class="pagination" aria-label="검색 결과 페이지"><button id="prev" disabled>이전 페이지</button><span id="page-number">1 페이지</span><button id="next" disabled>다음 페이지</button></nav>
+        </div>
+        <section id="detail" tabindex="-1" hidden aria-label="자료 상세"></section>
+        <details class="limits"><summary>지원 범위와 연결 정보</summary><p>현재 읽기 공급자의 지원 범위에서 자료를 탐색합니다. 별도 계약이 필요한 승인·정정·복원·동기화는 이 화면에서 실행하지 않습니다.</p></details>
+      </section>
+
+      <section id="conversations-view" class="conversations-view" aria-labelledby="conversations-heading" hidden>
+        <div class="view-header"><div><p class="eyebrow">IDEAS IN CONVERSATION</p><h1 id="conversations-heading" tabindex="-1">대화형 보기</h1><p>의견의 흐름을 살펴보고, 그 안에서 연결을 발견합니다.</p></div></div>
+        <div id="conversation-content" class="conversation-content"></div>
+      </section>
+      <footer class="workspace-footer"><span>UTT · 개인 연구와 창작 작업실</span><span>자료를 읽고, 맥락을 잇고, 생각을 펼칩니다.</span></footer>
+    </main>
+  </div>
+</body>
+</html>

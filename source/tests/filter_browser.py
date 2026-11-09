@@ -94,11 +94,18 @@ class FilterHarness:
 
 async def start(page, base, harness):
     await harness.install()
-    await page.goto(base)
+    await page.goto(base + '#library')
     await expect(page.locator('.record')).to_have_count(3)
     await expect(page.locator('#results')).to_have_attribute('aria-busy', 'false')
+    await open_details(page, '#filter-details')
     assert harness.feature_methods == ['GET']
     assert harness.searches
+
+
+async def open_details(page, selector):
+    details = page.locator(selector)
+    if await details.count() and not await details.evaluate('node => node.open'):
+        await details.locator(':scope > summary').click()
 
 
 async def submit(page):
@@ -206,6 +213,7 @@ async def check_unconfirmed_project_every_entry_point(browser, base):
             await page.get_by_role('button', name='가상 관측', exact=True).click()
             await expect(page.locator('#detail h2')).to_have_text('가상 관측')
             await assert_no_project_actions(page, '#detail')
+            await page.get_by_role('button', name='← 검색 결과로', exact=True).click()
             await page.locator('#project').evaluate("node => { node.value = 'synthetic-project-cloud'; }")
             query = await harness.action(lambda: submit(page))
             assert query['project_id'] is None
@@ -301,6 +309,7 @@ async def check_blank_query_lists_without_requesting_explicit_empty_search(brows
             query = await harness.action(lambda: page.get_by_role('button', name='필터 초기화', exact=True).click())
             assert query['query'] is None and query['cursor'] is None
             await expect(page.locator('.record')).to_have_count(3)
+            await open_details(page, '#connection-details')
             query = await harness.action(lambda: page.locator('#reconnect').click())
             assert query['query'] is None
             await expect(page.locator('.record')).to_have_count(3)

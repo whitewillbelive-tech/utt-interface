@@ -126,8 +126,7 @@ class SourceHarness:
 
 
 def source_card(page, source_id=FIRST):
-    return page.locator('.source').filter(
-        has=page.get_by_role('heading', name=source_id, exact=True))
+    return page.locator(f'.source[data-source-id="{source_id}"]')
 
 
 def source_button(card):
@@ -140,7 +139,7 @@ async def wait_for_list(page, count=3):
 
 
 async def open_observation(page, base):
-    await page.goto(base)
+    await page.goto(base+'#library')
     await wait_for_list(page)
     await page.get_by_role('button', name='가상 관측', exact=True).click()
     await expect(page.locator('#detail h2')).to_have_text('가상 관측')
@@ -240,7 +239,8 @@ async def check_unknown_version_and_failure_states(browser, base):
         card = source_card(page)
         await expect(source_button(card)).to_be_disabled()
         await expect(card).to_contain_text('미확인')
-        await expect(card.get_by_role('heading', name=FIRST, exact=True)).to_be_visible()
+        await expect(card.get_by_role('heading', name='출처 1', exact=True)).to_be_visible()
+        await expect(card).to_have_attribute('data-source-id', FIRST)
         assert not harness.queries
     finally:
         await page.close()
@@ -380,7 +380,7 @@ async def check_late_source_after_navigation(browser, base):
             harness = SourceHarness(page, respond=respond)
             await harness.install()
             if navigation == 'record':
-                await page.goto(base)
+                await page.goto(base+'#library')
                 await wait_for_list(page)
                 await page.locator('#search').fill('가상 이력')
                 await wait_for_list(page, 1)
@@ -397,6 +397,7 @@ async def check_late_source_after_navigation(browser, base):
                 await page.get_by_role('button', name='← 검색 결과로', exact=True).click()
                 await expect(page.locator('#detail')).to_be_hidden()
             else:
+                await page.get_by_role('button', name='← 검색 결과로', exact=True).click()
                 await page.locator('#search').fill('가상 미분류')
                 await wait_for_list(page, 1)
                 await expect(page.locator('#detail')).to_be_hidden()
@@ -418,7 +419,7 @@ async def check_mobile_list_return_after_source(browser, base):
     try:
         harness = SourceHarness(page)
         await harness.install()
-        await page.goto(base)
+        await page.goto(base+'#library')
         await wait_for_list(page)
         await page.locator('#search').fill('가상')
         await page.locator('#role').select_option('SYNTHETIC_NOTE')
