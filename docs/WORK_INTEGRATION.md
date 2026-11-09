@@ -313,9 +313,16 @@ py -3 -m app.dropbox_windows
 
 ## 2026-11-09 — 신규 작업실 UI 통합
 
-09 UI 기준 `8f83863818ab111039ff3d5ba53a7465b2f4c63f`은 main `a313207f4173bfec850bdd94fcffa2682b90a79c`의 직접 후속이며 [PR #11](https://github.com/whitewillbelive-tech/utt-interface/pull/11)로 통합한다. 작업실 홈·프로젝트 탐색·자료실·대화형 보기·반응형 배치를 제공한다. 검색·페이지·상세·출처는 기존 읽기 API 및 출처 검증을 재사용한다. 뷰 사이의 브라우저 뒤로 가기를 지원하며, 상세/출처는 별도 브라우저 이력 항목이 아니므로 화면의 `← 검색 결과로` 버튼으로 목록과 이전 페이지·초점으로 돌아간다. 이는 기존 상세 이력 범위와 같다. 별도 UI 데이터 API·실제 연결·승인·저장 기능을 추가하지 않았다. Dropbox OAuth 구현도 변경하지 않는다.
+09 UI 기준 `8f83863818ab111039ff3d5ba53a7465b2f4c63f`은 main `a313207f4173bfec850bdd94fcffa2682b90a79c`의 직접 후속이며 [PR #11](https://github.com/whitewillbelive-tech/utt-interface/pull/11), 병합 `c4f1a5ebd173aee18840422b0c9095981637eac8`로 통합됐다. 작업실 홈·프로젝트 탐색·자료실·대화형 보기·반응형 배치를 제공한다. 검색·페이지·상세·출처는 기존 읽기 API 및 출처 검증을 재사용한다. 뷰 사이의 브라우저 뒤로 가기를 지원하며, 상세/출처는 별도 브라우저 이력 항목이 아니므로 화면의 `← 검색 결과로` 버튼으로 목록과 이전 페이지·초점으로 돌아간다. 이는 기존 상세 이력 범위와 같다. 별도 UI 데이터 API·실제 연결·승인·저장 기능을 추가하지 않았다. Dropbox OAuth 구현도 변경하지 않는다.
 
-대화형 보기는 합성 모드의 고정 가상 예시만 표시한다. 표시용 지역 모델은 `topic`, `discussion`, `userOpinion`, `aiOpinion`, `conclusion`, `status`, `messages[{speaker,text}]`, `metadata`를 사용한다. 사용자에 따르면 Work의 `conversation_readability_projection_2026_11_09`는 `UTT-CONVERSATION-VIEW/0.1-draft`이며 실제 대화를 변환한 자료가 아니다. 이 개발 환경에서는 Library 원문을 찾거나 읽지 못했으므로 초안의 필드·중첩·NULL 의미와 위 UI 모델의 구조적 차이는 **미확인**이다. 이름이 비슷하다는 이유로 필드를 대응하거나 호환을 주장하지 않는다. UI 모델은 초안 스키마·파서·변환기·실제 대화 API가 아니며 실제 대화 연결과 원본 검수는 NOT_RUN이다.
+대화형 보기는 합성 모드의 고정 가상 예시만 표시한다. 표시용 지역 모델은 단일 `topic`, `discussion`, `userOpinion`, `aiOpinion`, `conclusion`, 자유형 `status`, `messages[{speaker,text}]`, `metadata`를 사용한다. 관리 Chat이 전달한 설명에 따르면 Work `UTT_DATA_CONTRACT_v1.json` 버전 7의 `conversation_readability_projection_2026_11_09`는 `UTT-CONVERSATION-VIEW/0.1-draft`이고 실제 대화를 변환한 자료가 아니다. 다음 비교는 **관리 Chat이 메시지로 전달한 비민감 내용**과 현재 UI 코드에 근거한다. 언급된 추출 JSON의 파일 참조는 이 개발 환경에 전달되지 않아 전체 스키마와 가상 예시를 직접 대조한 결과는 아니다.
+
+- **대화와 주제:** 초안에는 `format_version`, `source`의 `conversation_ref`·`revision`·`verification`, `generated_status`(`unreviewed_synthetic` / `unreviewed` / `reviewed`)와 여러 `topics`의 `topic_ref`·`title`·`message_refs`·`claims`가 있다. UI의 단일 주제와 시연 정보에는 그 원본 참조·버전·검증 상태나 여러 주제의 계층이 없다.
+- **주장과 상태:** 초안의 각 claim은 `text`, `actor`(`user` / `assistant` / `both` / `unknown`), `status`(`viewpoint` / `proposal` / `confirmed` / `unresolved` / `deferred` / `disagreement` / `unknown`)와 `evidence`를 가진다. UI의 두 의견 칸과 자유형 상태·결론은 개별 주장과 작성자·상태를 보존하는 구조가 아니다. 사용자 확정과 AI 제안을 혼동하거나 `confirmed`를 별도 승인 이력으로 임의 승격하지 않는다.
+- **근거와 좌표:** 초안 evidence는 `message_ref`, `source_revision`, `precision`과 선택적 `span`을 구분한다. span은 `precision=span`일 때만 사용하며 Unicode code point 기준 `start`와 `end_exclusive`다. UI의 `{speaker,text}` 메시지에는 해당 참조·버전·정밀도·좌표가 없다. 이 좌표를 기존 출처 UI의 UTF-16 위치 규약과 동일시하지 않는다.
+- **프로젝트와 대화 사이 후보:** 초안의 `projects`는 `display_name`과 연결 `basis`(`explicit` / `inferred` / `unknown`)를 구분하고, `cross_conversation_candidates`는 `target_ref`, `status=candidate`, `merged=false`, `reason`을 보존한다. 현 가상 대화 모델에는 이 근거와 미병합 후보를 표현하는 대응 구조가 없다.
+
+두 형식의 호환이나 임의 필드 변환을 주장하지 않는다. UI 모델은 Work 스키마·파서·변환기·실제 대화 API가 아니다. 향후 확인된 원문 메시지는 별도 승인된 조회 경계가 필요하며 `UTT-ACCESS-READ/0.1.0` record에 필드를 임의로 추가하지 않는다. 실제 대화 연결·원본 검수와 추출 JSON 전체 대조는 NOT_RUN이다.
 
 `source/tests/studio_browser.py`는 원형 검증 허용 파일 목록과 `tools/run_checks.py`에 등록했다. 작업실 집계, 검색·페이지·상세·출처·목록 복귀, 뒤로 가기·지연 응답, 미연결·미지원 필터, 합성 대화 escaping, 데스크톱·모바일 배치를 가상 자료로 검증한다. 합성 fixture는 실제 DB·대화·원장을 열지 않는다. 실제 Windows 사용자 검수·운영 데이터 검증은 별개다.
 
