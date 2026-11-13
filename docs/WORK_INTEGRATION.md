@@ -345,3 +345,34 @@ py -3 -m app.server --mode readonly --port 8767
 공식 Chromium runner는 `/usr/bin/chromium`을 사용하는 Linux 시험이다. 위 Windows 절차는 사용자 수동 검수 방법이며 이번 개발 환경에서의 Windows 실행 결과가 아니다.
 
 공식 합성 검증 `20261109T101349Z-aee713e6`: 전체 14단계 PASS, Python 200개, Node 46개, 스키마 61건, 기존 Chromium 흐름 및 신규 작업실 7개 검증 묶음 PASS. 이 실행은 UI 기준 커밋에 runner·허용 목록을 적용한 작업트리에서 수행했으며, 실제 자료나 Windows 수용 검사가 아니다. 합성 데스크톱·모바일 캡처도 확인했다.
+
+## 2026-11-13 — Dropbox 메타데이터와 합성 대화 검증 준비
+
+사용자가 전달한 Windows 신규 작업실 수용 검수 3/3 PASS 및 기존 D0 자동시험·스키마 PASS는 해당 사용자의 별도 결과다. 이번 개발 환경에서 실제 Windows·Dropbox·DB·원장·대화 원문은 조회하지 않았다.
+
+`app/dropbox_metadata.py`는 기존 `ReadOnlySession`의 합성 PKCE 토큰 범위·만료를 재사용해 단일 가상 대상의 `files/get_metadata` 형태 응답을 검사한다. 중복 JSON 키·모호한 복수 객체, 인증 만료/필요·접근 거부·가상 대상 부재·범위 오류·요청 실패를 구분한다. 진단 결과는 고정 상태만 포함하며 이름·원천 ID·경로·revision·해시·토큰을 반환하거나 기록하지 않는다. `FOUND_UNVERIFIED`는 **가상 응답 검사**이고 원본 무결성 또는 snapshot 불변성은 각각 `UNVERIFIED`다. 단일 대상의 get_metadata 검사로 다른 위치의 중복을 찾거나 App Folder 종류를 판별할 수 없다. 파일 본문 다운로드·업로드·수정·삭제·공유·원장 API는 제공하지 않는다.
+
+`app/dropbox_metadata_windows.py`는 사용자가 승인된 Windows 환경에서 콘솔의 기존 앱 이름·App Folder 유형을 직접 확인하고, 같은 앱 키와 이미 확인된 단일 `path_lower`를 로컬에서 숨김 입력한 뒤 명시적으로 시작하는 경로다. 기존 PKCE와 고정 Dropbox TLS token 교환으로 만든 같은 프로세스의 단기 세션에 입력 앱 키·정확한 두 scope·원래 만료 시계를 결속한다. 가짜 주입 transport나 시험용 시계로 만든 세션은 실조회에 사용할 수 없다. 조회는 고정 Dropbox HTTPS의 단일 `files/get_metadata`만 사용하며 프록시·redirect·path-root override, 목록·탐색·본문·쓰기 기능은 없다. 미리 확인된 canonical `path_lower`와 응답을 정규화 추측 없이 정확히 대조하며 다르면 거부한다. 실제 Dropbox의 경로 규칙에 따라 유효한 입력도 다르면 거부될 수 있다. 심볼릭 링크 메타데이터는 미지원으로 거부하며 대상을 따라가지 않는다. 값은 출력·로그·기록하지 않는다.
+
+App Folder 유형과 기존 앱 식별의 신뢰 근거는 **사용자의 로컬 Developer Console 확인**이며 `USER_CONFIRMED`로 표시한다. Dropbox의 scope 응답이나 metadata가 앱 유형을 독립 증명하는 것은 아니다. 다른 앱을 잘못 확인하거나 키를 잘못 입력한 사람의 실수를 원격으로 판별할 수 없고, 가상 fixture의 앱·범위 표시도 실제 증거가 아니다. 사용자 확인과 다른 앱 키·범위는 허용하지 않으며, 경로 모양이나 입력값만으로 제공자의 App Folder 증명을 주장하지 않는다. 이 코드의 내부 guard나 Python 객체 은닉은 악의적인 동일 프로세스에 대한 보안 경계가 아니다. 요청 시작 직전 세션을 재검사하고 송신과 종료를 동기화하며 응답 뒤 만료·취소를 다시 검사한다. 전송이 먼저 시작되면 종료가 송신 완료를 기다릴 수 있고 HTTPS의 10초 제한은 각 소켓 동작의 대기 제한이지 전체 절대 기한은 아니다.
+
+실제 요청 전에는 승인된 사용자 전용 실행환경과 개발 도구·로그의 접근 분리, 올바른 앱·scope, 기존 등록 redirect 및 단일 canonical 대상의 로컬 확인이 필요하다. 실제 기준본의 원형 무결성과 DB·SQLite 보조 파일을 포함한 snapshot 불변성은 OAuth/메타데이터와 별도로 입증해야 한다. Dropbox content_hash를 원본 전체 바이트의 일반 SHA-256으로 취급하지 않는다. 실제 파일명·ID·경로·인증정보·로그는 이 환경이나 저장소로 가져오지 않는다.
+
+`contracts/utt-conversation-view-0.1-draft.schema.json`은 위 사용자 첨부 비민감 Work 초안의 스키마 발췌와 일치하며 기존 `UTT-ACCESS-READ/0.1.0`에 필드를 추가하지 않는다. `app/conversation_draft.py`는 명시적으로 선택한 **합성 in-memory fixture**만 위한 독립 검사기다. 대화·메시지 참조의 일치, 중복과 순서, source/evidence revision, 작성자 근거, Unicode code point 기준 구간을 검사한다. 메시지 부재는 `UNAVAILABLE`, revision 변경은 `STALE`, 통과는 `STRUCTURALLY_VALID / SEMANTICS_UNVERIFIED`로 나타내며 주장 의미·인용 정확성·사용자 승인·실제 원천을 입증하지 않는다. synthetic 표시는 호출자의 선언이지 실제 자료의 유입을 차단하는 보안 경계가 아니므로 실제 메시지는 넣지 않는다. 서버·UI·운영 대화 API에 연결하지 않는다.
+
+Windows의 Python 3.11 이상 PowerShell에서 저장소 루트에서 다음 명령으로 합성 검사만 실행할 수 있다. 가상 OAuth 응답과 가상 메시지를 사용하며 실제 앱 키·경로·이름·원천 ID를 입력하지 않는다.
+
+```powershell
+py -3 -m unittest discover -s tests -p test_dropbox_metadata.py -v
+py -3 -m unittest discover -s tests -p test_conversation_draft.py -v
+```
+
+기존 `py -3 -m app.dropbox_windows --diagnose`는 사용자 조작으로 로컬 가상 OAuth 콜백만 시험한다. 추후 위 승인 조건을 충족한 **사용자 PC에서만** 다음 명령으로 로컬 확인 및 단일 메타데이터 조회를 시작할 수 있다. 개발 환경에서 실행하거나 실제 값·결과 원문을 Codex/GitHub에 전달하지 않는다.
+
+```powershell
+py -3 -m app.dropbox_metadata_windows
+```
+
+프로그램은 기존 앱·App Folder를 직접 확인한 뒤 `CONFIRM`, 이미 등록된 redirect URI 두 값, 숨김 앱 키 두 번, 이미 확인된 canonical `path_lower`의 숨김 입력, `START`를 순서대로 요구한다. 숨김 입력을 보장할 수 없으면 중단한다. 결과는 고정 상태와 `USER_CONFIRMED`, 무결성·snapshot `UNVERIFIED`만 표시하고 세션을 닫는다. 브라우저 callback URL에 인증 코드가 잠시 노출되거나 기록될 가능성은 기존 OAuth와 같다. 실조회·실제 대화 변환·운영 배포는 모두 NOT_RUN이다.
+
+이번 합성 전체 회귀 검사 `20261113T143322Z-340856cd`: 14단계 PASS, Python 251개(메타데이터 35개·대화 초안 16개 포함), Node 46개, 기존 읽기 스키마 61건 및 Chromium UI 검사 PASS. 가상 Dropbox 응답·모의 HTTPS와 합성 메시지만 사용했다. 실제 Dropbox·실제 기준본·Windows 실행 검증은 아니다. 시험한 코드 tree와 PR tree를 대조한다.

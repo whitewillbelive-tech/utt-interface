@@ -21,7 +21,7 @@ import time
 from urllib.parse import parse_qs, urlencode, urlsplit
 import webbrowser
 
-from app.dropbox_auth import AuthAttempt, OAuthError, TOKEN_ENDPOINT, _redirect
+from app.dropbox_auth import AuthAttempt, OAuthError, TOKEN_ENDPOINT, _redirect, token_transport
 
 
 def validate_redirect(configured: str, registered: str) -> tuple[int, str]:
@@ -40,46 +40,6 @@ def validate_redirect(configured: str, registered: str) -> tuple[int, str]:
     if uri.hostname != '127.0.0.1' or uri.netloc != f'127.0.0.1:{uri.port}':
         raise OAuthError('INVALID_REDIRECT')
     return uri.port, uri.path or '/'
-
-
-def _unique_json(pairs):
-    result = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError('duplicate key')
-        result[key] = value
-    return result
-
-
-def token_transport(endpoint: str, form: dict[str, str], *, connection_factory=None):
-    """POST only to Dropbox's fixed TLS endpoint; no proxy or redirects."""
-    if endpoint != TOKEN_ENDPOINT or set(form) != {'code', 'grant_type', 'client_id', 'redirect_uri', 'code_verifier'}:
-        raise OAuthError('TOKEN_EXCHANGE_FAILED')
-    factory = connection_factory or http.client.HTTPSConnection
-    connection = None
-    try:
-        context = ssl.create_default_context()
-        connection = factory('api.dropboxapi.com', 443, timeout=10, context=context)
-        body = urlencode(form).encode('ascii')
-        connection.request('POST', '/oauth2/token', body=body, headers={
-            'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json',
-            'Cache-Control': 'no-store',
-        })
-        response = connection.getresponse()
-        if response.status != 200:
-            raise ValueError('HTTP error')
-        data = response.read(65537)
-        if len(data) > 65536:
-            raise ValueError('response too large')
-        return json.loads(data.decode('utf-8'), object_pairs_hook=_unique_json)
-    except Exception:
-        raise OAuthError('TOKEN_EXCHANGE_FAILED') from None
-    finally:
-        if connection is not None:
-            try:
-                connection.close()
-            except Exception:
-                pass
 
 
 class _LocalServer(ThreadingMixIn, HTTPServer):
