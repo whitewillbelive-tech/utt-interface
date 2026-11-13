@@ -10,6 +10,9 @@ import base64
 import hashlib
 import hmac
 import functools
+import http.client
+import json
+import ssl
 import threading
 import re
 import secrets
@@ -23,6 +26,7 @@ READ_SCOPES = frozenset({"files.metadata.read", "files.content.read"})
 _VERIFIER_RE = re.compile(r"[A-Za-z0-9._~-]{43,128}\Z")
 _APP_KEY_RE = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
 _SESSION_FACTORY = object()
+_TRUSTED_CLOCK = time.monotonic
 
 
 class OAuthError(Exception):
@@ -31,6 +35,49 @@ class OAuthError(Exception):
     def __init__(self, code: str):
         self.code = code
         super().__init__(code)
+
+
+def _unique_json(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError('duplicate key')
+        result[key] = value
+    return result
+
+
+def token_transport(endpoint: str, form: dict[str, str], *, connection_factory=None):
+    """POST only to Dropbox's fixed TLS endpoint; no proxy or redirects."""
+    if endpoint != TOKEN_ENDPOINT or set(form) != {'code', 'grant_type', 'client_id', 'redirect_uri', 'code_verifier'}:
+        raise OAuthError('TOKEN_EXCHANGE_FAILED')
+    factory = connection_factory or http.client.HTTPSConnection
+    connection = None
+    try:
+        context = ssl.create_default_context()
+        connection = factory('api.dropboxapi.com', 443, timeout=10, context=context)
+        body = urlencode(form).encode('ascii')
+        connection.request('POST', '/oauth2/token', body=body, headers={
+            'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json',
+            'Cache-Control': 'no-store',
+        })
+        response = connection.getresponse()
+        if response.status != 200:
+            raise ValueError('HTTP error')
+        data = response.read(65537)
+        if len(data) > 65536:
+            raise ValueError('response too large')
+        return json.loads(data.decode('utf-8'), object_pairs_hook=_unique_json)
+    except Exception:
+        raise OAuthError('TOKEN_EXCHANGE_FAILED') from None
+    finally:
+        if connection is not None:
+            try:
+                connection.close()
+            except Exception:
+                pass
+
+
+_TRUSTED_TOKEN_TRANSPORT = token_transport
 
 
 def _redirect(value: str) -> tuple[str, str]:
@@ -67,24 +114,107 @@ class ReadOnlySession:
     app is an App Folder app. The constructor seal prevents accidental bypass.
     """
 
-    __slots__ = ("__token", "expires_at", "scopes", "_clock")
+    __slots__ = ("__token", "expires_at", "scopes", "__clock", "__deadline",
+                 "__granted_scopes", "__app_key", "__trusted_exchange", "__lock",
+                 "__generation", "__metadata_permit")
 
-    def __init__(self, token: str, expires_at: float, clock: Callable[[], float], *, _seal: object = None):
+    def __init__(self, token: str, expires_at: float, clock: Callable[[], float], *, _seal: object = None,
+                 _app_key: str = '', _trusted_exchange: bool = False):
         if _seal is not _SESSION_FACTORY:
             raise OAuthError("INVALID_SESSION_CONSTRUCTION")
         self.__token = token
         self.expires_at = expires_at
         self.scopes = READ_SCOPES
-        self._clock = clock
+        self.__clock = clock
+        self.__deadline = expires_at
+        self.__granted_scopes = READ_SCOPES
+        self.__app_key = _app_key
+        self.__trusted_exchange = _trusted_exchange
+        self.__lock = threading.RLock()
+        self.__generation = 0
+        self.__metadata_permit = None
 
     def __repr__(self) -> str:
         return "<ReadOnlySession redacted>"
 
     def is_valid(self) -> bool:
-        return bool(self.__token) and self._clock() < self.expires_at
+        with self.__lock:
+            return bool(self.__token) and self.__clock() < self.__deadline
 
     def close(self) -> None:
-        self.__token = ""
+        with self.__lock:
+            self.__token = ""
+            self.__generation += 1
+            self.__metadata_permit = None
+
+    def _valid_metadata_permit(self, permit: object, target: str, bearer: str) -> bool:
+        """Internal one-request proof; never returns credentials or identifiers."""
+        with self.__lock:
+            expected = self.__metadata_permit
+            return bool(expected and expected[0] is permit and expected[1] == target
+                        and self.__token and isinstance(bearer, str)
+                        and hmac.compare_digest(self.__token, bearer)
+                        and self.__trusted_exchange and self.scopes == self.__granted_scopes == READ_SCOPES
+                        and self.__clock() < self.__deadline)
+
+    def _send_metadata_if_valid(self, permit: object, target: str, bearer: str, send: Callable[[], None]) -> bool:
+        """Serialize close with the start and send of an authorized request.
+
+        If close wins, no request is sent. If sending wins, close waits for the
+        send operation; response validation still rechecks generation/expiry.
+        """
+        with self.__lock:
+            if not self._valid_metadata_permit(permit, target, bearer):
+                return False
+            send()
+            return True
+
+    def _inspect_metadata(self, *, confirmed_app_key: str, app_folder_confirmation: str, target: str):
+        """Make one explicitly authorized metadata call without exposing token.
+
+        The user's App Folder attestation is local and cannot independently
+        prove the server-side app type. Python process integrity is assumed.
+        """
+        from app.dropbox_metadata import MetadataInspection, _request_metadata_https
+
+        verified_attestation = False
+
+        def state(status):
+            source = 'USER_CONFIRMED' if verified_attestation else 'UNVERIFIED'
+            return MetadataInspection(status, source=source)
+
+        with self.__lock:
+            if not self.__token or self.__clock() >= self.__deadline:
+                return state('AUTH_EXPIRED')
+            if not self.__trusted_exchange or self.scopes != self.__granted_scopes or self.__granted_scopes != READ_SCOPES:
+                return state('APP_UNVERIFIED')
+            if app_folder_confirmation != 'USER_CONFIRMED':
+                return state('APP_FOLDER_UNCONFIRMED')
+            if (not isinstance(confirmed_app_key, str) or not _APP_KEY_RE.fullmatch(confirmed_app_key)
+                    or not hmac.compare_digest(self.__app_key, confirmed_app_key)):
+                return state('APP_KEY_MISMATCH')
+            verified_attestation = True
+            if self.__metadata_permit is not None:
+                return state('REQUEST_IN_PROGRESS')
+            permit = object()
+            self.__metadata_permit = (permit, target)
+            generation, bearer = self.__generation, self.__token
+        try:
+            response = _request_metadata_https(target=target, bearer=bearer, _guard=(self, permit))
+            with self.__lock:
+                if not self.__token or generation != self.__generation or self.__clock() >= self.__deadline:
+                    return state('AUTH_EXPIRED')
+                if self.scopes != self.__granted_scopes:
+                    return state('APP_UNVERIFIED')
+                if response.status == 'AUTH_REQUIRED':
+                    self.__token = ''
+                    self.__generation += 1
+                    return state('AUTH_REQUIRED')
+                return MetadataInspection(response.status, source='USER_CONFIRMED')
+        finally:
+            with self.__lock:
+                if self.__metadata_permit and self.__metadata_permit[0] is permit:
+                    self.__metadata_permit = None
 
 
 def _synchronized(method):
@@ -108,7 +238,7 @@ class AuthAttempt:
         self._lock = threading.RLock()
         self._redirect_uri, self._path = _redirect(redirect_uri)
         self._app_key = app_key
-        self._clock = clock
+        self.__clock = clock
         self._state = secrets.token_urlsafe(32)
         self._verifier = secrets.token_urlsafe(64)
         self._challenge = _challenge(self._verifier)
@@ -122,7 +252,7 @@ class AuthAttempt:
     def _pending(self) -> None:
         if self._status != "pending":
             raise OAuthError("ATTEMPT_CLOSED")
-        if self._clock() >= self._deadline:
+        if self.__clock() >= self._deadline:
             self.cancel()
             raise OAuthError("ATTEMPT_EXPIRED")
 
@@ -174,7 +304,7 @@ class AuthAttempt:
     def exchange(self, transport: Callable[[str, dict[str, str]], Any]) -> ReadOnlySession:
         if self._status != "callback":
             raise OAuthError("ATTEMPT_CLOSED")
-        if self._clock() >= self._deadline:
+        if self.__clock() >= self._deadline:
             self.cancel()
             raise OAuthError("ATTEMPT_EXPIRED")
         # Close before calling arbitrary transport, preventing retry/reentrancy.
@@ -184,9 +314,10 @@ class AuthAttempt:
         self._status = "closed"
         if not _VERIFIER_RE.fullmatch(verifier) or not hmac.compare_digest(_challenge(verifier), self._challenge):
             raise OAuthError("INVALID_VERIFIER")
-        form = {"code": code, "grant_type": "authorization_code", "client_id": self._app_key,
+        app_key = self._app_key
+        form = {"code": code, "grant_type": "authorization_code", "client_id": app_key,
                 "redirect_uri": self._redirect_uri, "code_verifier": verifier}
-        started = self._clock()
+        started = self.__clock()
         try:
             result = transport(TOKEN_ENDPOINT, form)
         except Exception:
@@ -212,9 +343,12 @@ class AuthAttempt:
                 or "refresh_token" in result):
             raise OAuthError("INVALID_TOKEN_RESPONSE")
         expires_at = started + ttl
-        if self._clock() >= expires_at:
+        if self.__clock() >= expires_at:
             raise OAuthError("TOKEN_EXPIRED")
-        return ReadOnlySession(token, expires_at, self._clock, _seal=_SESSION_FACTORY)
+        return ReadOnlySession(token, expires_at, self.__clock, _seal=_SESSION_FACTORY,
+                               _app_key=app_key,
+                               _trusted_exchange=(transport is _TRUSTED_TOKEN_TRANSPORT
+                                                  and self.__clock is _TRUSTED_CLOCK))
 
     @_synchronized
     def cancel(self) -> None:
