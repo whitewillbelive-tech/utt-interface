@@ -376,3 +376,23 @@ py -3 -m app.dropbox_metadata_windows
 프로그램은 기존 앱·App Folder를 직접 확인한 뒤 `CONFIRM`, 이미 등록된 redirect URI 두 값, 숨김 앱 키 두 번, 이미 확인된 canonical `path_lower`의 숨김 입력, `START`를 순서대로 요구한다. 숨김 입력을 보장할 수 없으면 중단한다. 결과는 고정 상태와 `USER_CONFIRMED`, 무결성·snapshot `UNVERIFIED`만 표시하고 세션을 닫는다. 브라우저 callback URL에 인증 코드가 잠시 노출되거나 기록될 가능성은 기존 OAuth와 같다. 실조회·실제 대화 변환·운영 배포는 모두 NOT_RUN이다.
 
 이번 합성 전체 회귀 검사 `20261113T143322Z-340856cd`: 14단계 PASS, Python 251개(메타데이터 35개·대화 초안 16개 포함), Node 46개, 기존 읽기 스키마 61건 및 Chromium UI 검사 PASS. 가상 Dropbox 응답·모의 HTTPS와 합성 메시지만 사용했다. 실제 Dropbox·실제 기준본·Windows 실행 검증은 아니다. 시험한 코드 tree와 PR tree를 대조한다.
+
+## 2026-11-14 — 기존 App Folder 활성 기준본 탐색 준비
+
+사용자가 기존 UnifiedThinkTank Dropbox App Folder 앱의 Windows 실제 읽기 전용 OAuth 인증 성공과 Work `UTT_DATA_CONTRACT_v1.json` 버전 9의 `work_approved_baseline_evidence_2026_11_14` 판정을 전달했다. 이 환경은 해당 v9 원문이나 실제 Dropbox를 열지 않았다. 전달받은 상태는 `A_CURRENT_REMOTE_IDENTIFICATION=UNKNOWN`, `ACTIVE_MANIFEST_CHAIN=UNKNOWN`, `PRIOR_BASELINE_MATCH=UNKNOWN`, `CANONICAL_PATH_LOCALLY_KNOWN=UNKNOWN`, `APPROVED_RUNTIME_ISOLATION=BLOCKED`, `NEXT_SAFE_ACTION=BLOCKED`다. OAuth 성공은 현재 기준본·App Folder 격리·원본 무결성·snapshot 확인과 별개다.
+
+인계된 `source/SOURCE_README.md`와 A 정적 참조를 source-only로 검토했다. 기존 worker·서버·승인 카탈로그는 인계되지 않았고, 활성 reference·generation·COMMIT·manifest의 실제 식별·연결·필드 형식은 확인되지 않았다. 활성 일치·원격 검증·캐시 무결성을 구별하는 UI 표시는 남아 있으나 이를 정본 증거로 사용하지 않는다. 사용자가 전달한 역사적 절차는 active reference → generation → COMMIT/manifest → 과거 승인 근거 비교 → active reference 재확인이다. 실제 체인의 내용이 파일 본문에 있을 경우 이번 본문 다운로드 금지 아래 메타데이터만으로 그 내용을 검증할 수 있다는 근거도 없다. 실제 이름이나 경로를 추측하지 않는다.
+
+추후 원천 계약 확인을 위해 필요한 비민감 사항은 active reference를 식별하는 **절차와 필드 구조**, generation·COMMIT·manifest 관계와 비교할 승인 근거의 **형식·의미**, 메타데이터만으로 검증 가능한 부분과 본문이 필요한 부분의 구분, reference 재확인 및 snapshot 불변성의 보장 범위다. 실제 파일명·경로·ID·해시·인증정보·본문·로그는 요청하지 않는다. 동일 대상의 전후 관찰은 중간에 변경됐다 복원되는 ABA 또는 전체 입력의 불변성을 증명하지 않는다.
+
+`app/baseline_explorer.py`는 실제 파일 형식을 모방하지 않는 **가상의 메모리 그래프**에서만 위 순서를 시험한다. 가상 fixture는 기본적으로 미승인이며 시험에서만 가상 승인을 명시한다. 가상 App Folder와 승인, 인증 상태, root 및 선택 generation의 완전성을 확인하고 최대 네 관찰과 누적 항목 상한을 강제한다. 활성 후보가 없거나 여러 개, 부분 범위, 중복 ID, 연결·승인 근거 불일치, 참조 교체, 접근 거부 및 만료는 각각 중단한다. 결과는 고정 상태만 포함하며 이름·경로·ID·해시·토큰을 반환하지 않는다. `SYNTHETIC_CHAIN_MATCH`에서도 실제 canonical과 snapshot은 `UNKNOWN`이다. 가상 그래프의 링크는 실제 Dropbox 메타데이터에 존재한다는 뜻이 아니고, 페이지 없는 완전성 가정도 실제 원천에서 증명된 것이 아니다. 합성 marker는 임의 데이터를 기술적으로 식별하는 보안 경계가 아니므로 실제 자료를 입력하지 않는다. `inspect_live()`는 입력과 환경을 읽기 전 무조건 `BLOCKED / LIVE_NOT_RUN`을 반환하며 실행 조건 플래그나 실제 transport가 없다. 기존 PR #14 단일 메타데이터 명령은 변경하지 않았고 이 새 탐색에 연결하지 않는다.
+
+Windows에서 Python 3.11 이상을 사용해 저장소 루트 PowerShell에서 다음 명령은 가상 fixture 시험만 실행한다. 사용자 앱 키·실제 자료·실제 경로를 입력하지 않는다.
+
+```powershell
+py -3 -m unittest discover -s tests -p test_active_baseline.py -v
+```
+
+사용자 전용 보호환경 확인은 실제 실행을 시작하라는 지시가 아니다. 현재 격리는 BLOCKED이며 다음 확인도 모두 아직 NOT_RUN이다. 기존에 승인된 환경이 있다면 사용자가 그 PC에서 (1) 개발 프로세스와 사용자 실행 프로세스의 OS 주체·권한을 각각 확인하고, 같은 주체 또는 동일한 접근 권한이면 실패로 판정한다. (2) 실행 코드·설정·종속성, 토큰·자료·로그에 대해 개발자가 읽기·변경·디버그·핸들 복제나 관리자·백업 권한으로 우회할 수 없는지, 상속 권한까지 포함해 확인한다. (3) 실제 자료 대신 비민감 합성 canary로 필요한 읽기·쓰기·프로세스 접근 차단을 시험하고 같은 실행 코드의 무결성을 확인한다. SID·실제 경로·계정·canary 값·원본 로그는 공유하지 않고 비민감 PASS/FAIL/UNKNOWN만 기록한다. 서로 다른 주체나 canary 하나만으로 전체 격리를 증명하지 않으며 확인 불가·실패가 하나라도 있으면 BLOCKED를 유지한다. 계정 생성, 권한 변경, 자료 이동은 수행하지 않는다.
+
+이번 합성 전체 회귀 검사 `20261114T024940Z-d6e64262`: 14단계 PASS, Python 275개(새 가상 기준본 탐색 24개 포함), Node 46개, 기존 스키마 61건, 기존 Chromium UI 흐름 PASS, 원형 38개 보존 확인. 네트워크를 차단한 합성 탐색 및 가상 원천만 사용했다. 실제 Windows 보호환경·Dropbox 원천·운영 기준본 검사 결과가 아니다. 검증한 코드 tree와 PR tree를 대조한다.
