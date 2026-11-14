@@ -48,7 +48,9 @@
     "contracts/utt-conversation-view-0.1-draft.schema.json",
     "tests/test_conversation_draft.py",
     "tests/test_dropbox_metadata.py",
-    "tests/test_active_baseline.py"
+    "tests/test_active_baseline.py",
+    "tests/test_dropbox_content_hash.py",
+    "tests/test_dropbox_upload_session.py"
   ],
   "development_prefixes": [
     "app/",
