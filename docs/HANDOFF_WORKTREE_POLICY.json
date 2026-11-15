@@ -50,7 +50,19 @@
     "tests/test_dropbox_metadata.py",
     "tests/test_active_baseline.py",
     "tests/test_dropbox_content_hash.py",
-    "tests/test_dropbox_upload_session.py"
+    "tests/test_dropbox_upload_session.py",
+    "tests/test_publisher_auth.py",
+    "tests/test_publisher_candidate.py",
+    "tests/test_publisher_parent.py",
+    "tests/test_publisher_reader.py",
+    "tests/test_publisher_transport.py",
+    "tests/test_publisher_workspace.py",
+    "tests/test_publisher_workspace_reader.py",
+    "tests/test_publisher_pipeline.py",
+    "tests/test_publisher_read_transport.py",
+    "tests/test_publisher_windows.py",
+    "tests/test_publisher_workspace_bridge.py",
+    "source/tests/publisher_workspace_browser.py"
   ],
   "development_prefixes": [
     "app/",

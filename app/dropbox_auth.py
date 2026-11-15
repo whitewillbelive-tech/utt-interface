@@ -216,6 +216,43 @@ class ReadOnlySession:
                 if self.__metadata_permit and self.__metadata_permit[0] is permit:
                     self.__metadata_permit = None
 
+    def _publisher_read(self, callback, operation, *, confirmed_app_key: str, app_folder_confirmation: str):
+        """Use a verified read-only grant with the fixed native-generation reader.
+
+        Source bytes remain on the user's machine.  Arbitrary callbacks are
+        rejected before the bearer is made available; same-process integrity is
+        still assumed.  The lock serializes close with each download.
+        """
+        try:
+            from app.publisher_read_transport import _dispatch, PublisherReadTransportError
+        except ImportError:
+            raise OAuthError('READ_TRANSPORT_UNAVAILABLE') from None
+        if callback is not _dispatch:
+            raise OAuthError('READ_TRANSPORT_UNTRUSTED')
+        with self.__lock:
+            if not self.__token or self.__clock() >= self.__deadline:
+                raise OAuthError('AUTH_EXPIRED')
+            if (not self.__trusted_exchange or self.scopes != self.__granted_scopes
+                    or self.__granted_scopes != READ_SCOPES):
+                raise OAuthError('READ_AUTH_UNVERIFIED')
+            if app_folder_confirmation != 'USER_CONFIRMED':
+                raise OAuthError('APP_FOLDER_UNCONFIRMED')
+            if (not isinstance(confirmed_app_key, str) or not _APP_KEY_RE.fullmatch(confirmed_app_key)
+                    or not hmac.compare_digest(self.__app_key, confirmed_app_key)):
+                raise OAuthError('APP_KEY_MISMATCH')
+            try:
+                result = callback(self.__token, operation)
+            except PublisherReadTransportError as exc:
+                if exc.code == 'AUTH_REQUIRED':
+                    self.__token = ''
+                    self.__generation += 1
+                raise
+            except Exception:
+                raise OAuthError('READ_REQUEST_FAILED') from None
+            if not self.__token or self.__clock() >= self.__deadline:
+                raise OAuthError('AUTH_EXPIRED_AFTER_REQUEST')
+            return result
+
 
 def _synchronized(method):
     @functools.wraps(method)

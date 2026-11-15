@@ -408,3 +408,35 @@ py -3 -m unittest discover -s tests -p test_active_baseline.py -v
 완성에 필요한 것은 기존 B-2 업로더의 비민감 source-only 코드와 승인/COMMIT/manifest/active-reference의 실제 계약, 새 DB의 비민감 스키마와 A→B 보존·충돌 정책이다. 실제 DB 본문·원장·계정·키·파일 경로·원본 로그는 개발환경으로 옮기지 않는다. 사용자 PC의 SQLite는 WAL을 포함한 일관된 snapshot과 편집 중단/최신성 경계를 확인해야 하며, DB 파일 본체만 복사하거나 `immutable=1`을 불변성 증거로 삼지 않는다. 별도 쓰기 token 권한 확인, 업로드 후 파일별 별도 재조회, COMMIT, `strict_conflict`를 포함한 revision 조건부 참조 갱신 및 모호한 결과의 안전한 재조정은 기존 형식 확인 후 구현·검증해야 한다. 실제 운영 발행 성공을 확인한 명령이나 결과는 현재 없다.
 
 독립 구성요소 합성 검사에서는 가상 151 MiB 스트림을 제한된 조각으로 처리했고 시작·완료 응답 유실, offset·크기·해시 불일치와 민감값 비출력을 시험했다. 전체 검사 `20261114T161627Z-34e6eba3`: 14단계 PASS, Python 294개(해시 7개·가상 세션 12개 포함), Node 46개, 기존 스키마 61건, Chromium UI 및 원형 38개 PASS. 이 결과는 실제 전송·재조회·복구·발행·Windows 수용의 증거가 아니며, 요구된 발행 도구의 완료 조건은 **미충족**이다.
+
+### PR #16 후속: Windows 사용자 실행 발행기와 workspace 읽기 연결
+
+기존 B-2 원문과 비민감 발행·보존 규칙의 인계 기준은 `dc086eba5fd1b69fd2c001969dba39aa10c9d772`다. 이후 PR #16의 코드 변경은 합성 검증 대상이며 실제 Dropbox 인증·읽기·쓰기와 실제 DB 검증은 **NOT_RUN**이다. 이 절의 명령은 사용자의 Windows에서 직접 실행하는 절차이지 개발환경에서 실자료를 열었다는 뜻이 아니다.
+
+- 발행기는 기존 읽기 전용 세션과 별도로 online PKCE의 `files.metadata.read`, `files.content.read`, `files.content.write`를 요청한다. 앱 비밀과 refresh token은 받거나 저장하지 않는다. 앱 키·DB 경로·임시 디렉터리는 로컬 숨김 입력이고 실행 결과에는 경로·ID·해시·토큰·원문을 출력하지 않는다.
+- 로컬 SQLite backup으로 WAL을 포함한 단일 스냅샷을 만들고 스키마·무결성·이력 및 읽기 제공자의 전체 목록·상세를 검사한다. 부모의 active/manifest/COMMIT과 파일들을 검증하고 기존 payload를 유지한 새 세대에 `UTT-WORKSPACE-OVERLAY/0.1`을 추가한다. 작업 DB가 현재 editable authority이며 기존 A payload를 새 DB라고 속이지 않는다. 이미 workspace가 있는 부모라면 이전 편집·이력도 비교한다. 기록의 승인 상태를 발행 때문에 바꾸지 않는다.
+- 고정 Dropbox HTTPS 경로에서 add-only 업로드 세션, 독립 재다운로드 및 해시 확인, 전체 재검증 뒤 COMMIT, 기존 active의 동일 응답 bytes/rev에 결속된 조건부 갱신과 재조회 순서로 진행한다. 결과가 불명인 쓰기를 자동 재시도하지 않는다. 부모 세대가 변경되거나 기존 COMMIT 아래 파일이 빠져 있으면 중지한다.
+- `app.publisher_workspace_server`는 별도의 읽기 전용 인증으로 active/manifest/COMMIT과 overlay 크기·해시 및 active 재확인 후 메모리 스냅샷을 기존 서버에 연결한다. 검색·목록·다음 페이지·상세를 제공하며 원출처·관계·이력·쓰기 API는 제공하지 않는다. 이전 A 프로그램은 세대 해시와 건수를 고정하므로 수정 없이 새 active를 열 수 없다. 새 서버를 사용하는 전환이 필요하며 이전 A 프로그램 자체를 수정했다고 주장하지 않는다.
+- reader는 DB 최대 512 MiB와 Python `sqlite3.deserialize`를 요구한다. 보관·병합 기록 또는 기존 READ 계약으로 표현할 수 없는 값은 추측하지 않고 거부하며 발행 전 전체 reader 검사를 통과해야 한다. 원생 표의 real/blob 직렬화나 미지원 catalog 구조는 추측하지 않고 중지한다. 따라서 실제 입력이 이 범위를 통과할지는 아직 확인되지 않았다. `D0Client.read()`의 차단은 유지한다.
+
+사용자 Windows 절차: 이 PR의 검토된 동일 코드와 Python 3.12를 사용하고 저장소 루트 PowerShell에서 다음을 실행한다. Dropbox 콘솔에서 기존 UnifiedThinkTank 앱이 App Folder인지, 이미 등록된 loopback redirect URI를 정확히 확인한다. 앱 설정·기존 연결은 변경하지 않는다.
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m app.publisher_windows
+```
+
+발행 명령은 `CONFIRM`, 등록된 것과 정확히 일치하는 redirect URI 두 번, 로컬 기존 앱 키 두 번, 로컬 workspace SQLite 경로와 사용자 전용 보호 임시 디렉터리를 숨김 입력으로 받은 뒤 `START`에서 브라우저 인증과 발행을 시작한다. App secret은 필요 없다. 시작 전에 다른 로컬 편집기를 닫고, 개발 도구와 다른 프로세스가 코드·자격증명·DB·임시 파일에 접근하거나 변경하지 못하는 사용자 전용 실행환경과 원격 세대의 단일 작성자 조건을 확보해야 한다. 이 코드는 ACL, 동일 OS 주체의 접근 분리 또는 원격 다중 파일의 원자적 불변성을 입증하지 않는다. active 참조 CAS는 마지막 검증과 CAS 사이에 다른 개별 payload가 바뀌는 경우까지 원자적으로 차단하지 못한다.
+
+`PUBLISHED`는 코드가 대상 COMMIT과 갱신된 active를 재조회했다는 로컬 실행 결과다. `ALREADY_ACTIVE`는 같은 활성 세대를 재검증한 결과다. 실제 사용자 실행에서 확인하기 전에는 둘 다 가정하지 않는다. 발행이 끝나면 같은 코드의 새 읽기 경로를 다음과 같이 별도로 실행하고 브라우저에서 표시된 loopback 주소를 연다.
+
+```powershell
+.\.venv\Scripts\python.exe -m app.publisher_workspace_server --port 8765
+```
+
+이 reader는 읽기 권한만 별도로 요청한다. 검색·목록·페이지·상세를 사용자 PC에서 직접 대조한다. 브라우저 callback 주소에 인증 코드가 잠시 보이거나 기록될 위험은 완전히 제거되지 않는다.
+
+중단·복구: 오류 코드를 로컬에서 확인하고 프로그램을 종료한다. `ACTIVE_CHANGED` 또는 부모/이력 충돌은 다른 발행·편집을 먼저 정리하고 데이터 차이를 보존한 뒤 새 계획으로 다시 시작한다. `COMMITTED_GENERATION_DAMAGED`, 해시 불일치, 지원하지 않는 직렬화·스키마 또는 reader 제한은 자동 복구·활성화를 하지 않는다. `ACTIVATION_UNKNOWN`이나 업로드 결과 불명에서는 실제 active가 바뀌었을 수 있다. 읽기 전용 서버로 현재 상태를 먼저 확인하고, 재실행하면 처음부터 현재 부모·파일·이력을 다시 검증한다. 활성 참조를 수동 덮어쓰거나 기존 세대를 삭제하지 않는다. 경로·기록·토큰·원본 로그를 외부로 보내지 않는다.
+
+합성 회귀 검증: 로컬 검사 `20261115T020834Z-8c7a5d93`는 원형 38개, Python 418개, Node 46개, 스키마 및 기존 Chromium과 신규 workspace Chromium을 포함한 15단계가 통과했다. 이 실행은 기준 `dc086e`의 변경된 작업트리에서 수행했다. 그 뒤 실제 `PublisherTransport`와 가짜 HTTPS를 통과하는 추가 종단 간 합성 시험도 별도로 통과했다. 이 결과는 실제 Windows·Dropbox·실DB 검증이 아니다.
