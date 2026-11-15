@@ -17,7 +17,7 @@ TEMP = r'C:\fictional\protected-temp'
 
 
 class PublisherWindowsCLITests(unittest.TestCase):
-    def invoke(self, *, answers=None, secrets=None, outcome=None, session_error=None, platform='win32'):
+    def invoke(self, *, answers=None, secrets=None, outcome=None, session_error=None, platform='win32', preflight=False):
         output = io.StringIO()
         session = mock.Mock()
         snapshot = mock.Mock()
@@ -34,7 +34,7 @@ class PublisherWindowsCLITests(unittest.TestCase):
             pipeline = stack.enter_context(mock.patch.object(cli, 'publish_snapshot',
                     return_value=outcome or PublicationResult('PUBLISHED', 'PUBLISHED')))
             stack.enter_context(contextlib.redirect_stdout(output))
-            code = cli.main()
+            code = cli.main(preflight=preflight)
         return code, output.getvalue(), secret, capture, auth, make_transport, pipeline, session, snapshot, transport
 
     def test_explicit_confirmation_and_start_required_before_local_or_remote_actions(self):
@@ -62,6 +62,17 @@ class PublisherWindowsCLITests(unittest.TestCase):
         session.close.assert_called_once_with()
         for value in (KEY, SOURCE, TEMP):
             self.assertNotIn(value, output)
+
+    def test_preflight_uses_read_only_pipeline_mode_not_normal_publisher(self):
+        answers = ['CONFIRM', REDIRECT, REDIRECT, 'PRECHECK']
+        secrets = [KEY, KEY, SOURCE, TEMP]
+        result = self.invoke(answers=answers, secrets=secrets, preflight=True,
+                             outcome=PublicationResult('PREFLIGHT', 'PREFLIGHT_OK'))
+        code, output, _, _, _, _, pipeline, session, snapshot, transport = result
+        self.assertEqual(code, 0)
+        self.assertIn('Preflight status: PREFLIGHT_OK', output)
+        self.assertIn('no upload, no COMMIT', output)
+        pipeline.assert_called_once_with(snapshot, transport, session, preflight_only=True)
 
     def test_mismatch_or_insecure_secret_input_stops_before_network(self):
         cases = [(['CONFIRM', REDIRECT, REDIRECT + '/'], [], 'REDIRECT_MISMATCH'),
