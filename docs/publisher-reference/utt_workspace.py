@@ -270,3 +270,4 @@ def verify(c):
          'source_evidence':c.execute('SELECT count(*) FROM work_sources').fetchone()[0],
          'events':len(events),'hash_failures':hash_bad,'missing_revisions':missing_rev,
          'foreign_key_failures':len(fk),'event_chain_errors':broken}
+
