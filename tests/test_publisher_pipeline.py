@@ -122,6 +122,22 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(result.code, 'ALREADY_ACTIVE')
         self.assertEqual(self.transport.writes, [])
 
+    def test_read_only_preflight_verifies_parent_without_any_remote_writes(self):
+        with snapshot_workspace(self.path, directory=Path(self.tmp.name)) as snap:
+            result = publish_snapshot(snap, self.transport, self.session,
+                                      preflight_only=True)
+        self.assertEqual((result.status, result.code), ('PREFLIGHT', 'PREFLIGHT_OK'))
+        self.assertEqual(self.transport.writes, [])
+        self.assertFalse(hasattr(self.transport, 'permit'))
+
+    def test_read_only_preflight_reports_precise_failure_and_does_not_upload(self):
+        self.transport.corrupt_download = True
+        with snapshot_workspace(self.path, directory=Path(self.tmp.name)) as snap:
+            result = publish_snapshot(snap, self.transport, self.session,
+                                      preflight_only=True)
+        self.assertEqual((result.status, result.code), ('NOT_VERIFIED', 'REMOTE_PAYLOAD_MISMATCH'))
+        self.assertEqual(self.transport.writes, [])
+
     def test_uncertain_cas_is_never_retried_or_logged(self):
         self.transport.fail_cas = True
         result = self.run_pipeline()
