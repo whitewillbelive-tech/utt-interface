@@ -6,11 +6,12 @@ import gzip
 import hashlib
 import io
 import json
+import math
 import sqlite3
 import unittest
 from unittest.mock import patch
 
-from app.publisher_parent import compare_parent_tables
+from app.publisher_parent import _Problem, _local_row, _parent_row, compare_parent_tables
 
 
 def enc(value):
@@ -81,12 +82,12 @@ class ParentComparisonTests(unittest.TestCase):
         invalid[0][1] = ['integer', str(2**63)]
         self.assertNotEqual(self.check(self.input_for(invalid)).status, 'PARENT_ROWS_PRESENT')
 
-    def test_unverified_blob_and_real_never_pass(self):
-        for tag in ('blob', 'real'):
-            with self.subTest(tag=tag):
-                bad = copy.deepcopy(self.rows)
-                bad[0][0] = [tag, 'not-interpreted']
-                self.assertEqual(self.check(self.input_for(bad)).code, 'UNSUPPORTED_CELL_ENCODING')
+    def test_unverified_blob_remains_unsupported_and_invalid_real_is_rejected(self):
+        bad = copy.deepcopy(self.rows)
+        bad[0][0] = ['blob', 'not-interpreted']
+        self.assertEqual(self.check(self.input_for(bad)).code, 'UNSUPPORTED_CELL_ENCODING')
+        bad[0][0] = ['real', 'not-interpreted']
+        self.assertEqual(self.check(self.input_for(bad)).code, 'INVALID_TYPED_CELL')
 
     def test_catalog_and_shards_are_bound_to_manifest(self):
         catalog, manifest, opener = self.input_for()
@@ -185,6 +186,105 @@ class ParentComparisonTests(unittest.TestCase):
         blobs[changed[1]] = changed[2]
         conflict = compare_parent_tables(db, *package([changed[0], shadow[0]]))
         self.assertEqual(conflict.code, 'PARENT_ROW_CONFLICT')
+
+
+class NativeRealComparisonTests(unittest.TestCase):
+    def test_float_hex_is_compared_as_binary64_with_real_type(self):
+        for value in (1.5, -0.0, 0.0, -3.25, float.fromhex('0x0.0000000000001p-1022'),
+                      float.fromhex('0x1.fffffffffffffp+1023')):
+            with self.subTest(value=value.hex()):
+                self.assertEqual(_parent_row([['real', value.hex()]], 1), _local_row((value,)))
+        self.assertNotEqual(_parent_row([['real', '0x1.8000000000000p+0']], 1),
+                            _local_row((math.nextafter(1.5, math.inf),)))
+        self.assertNotEqual(_parent_row([['real', '0x1.0000000000000p+0']], 1), _local_row((1,)))
+        self.assertNotEqual(_parent_row([['real', '-0x0.0p+0']], 1), _local_row((0.0,)))
+
+    def test_invalid_nonfinite_overflow_and_blob_fail_closed(self):
+        for value in ('nan', 'inf', '-inf', '1.5', '0x1p+9999', '0x1p', '', None,
+                      1.5, '0x' + '1' * 129 + 'p+1'):
+            with self.subTest(value_type=type(value).__name__):
+                with self.assertRaises(_Problem):
+                    _parent_row([['real', value]], 1)
+        for value in (math.inf, -math.inf, math.nan):
+            with self.subTest(value=value):
+                with self.assertRaises(_Problem):
+                    _local_row((value,))
+        with self.assertRaises(_Problem) as exc:
+            _parent_row([['blob', 'fictional-encoding']], 1)
+        self.assertEqual(exc.exception.code, 'UNSUPPORTED_CELL_ENCODING')
+
+    def test_real_rows_preserve_rowid_occurrences_and_reject_wrong_value(self):
+        db = sqlite3.connect(':memory:')
+        self.addCleanup(db.close)
+        sql = 'CREATE TABLE sample (value)'
+        db.execute(sql)
+        db.executemany('INSERT INTO sample VALUES (?)', [(1.5,), (1.5,), (1,)])
+        db.commit()
+        db.execute('PRAGMA query_only=ON')
+        db.execute('BEGIN')
+
+        def compare(rows):
+            raw = b''.join(enc(row) + b'\n' for row in rows)
+            compressed = gzip.compress(raw, mtime=0)
+            path = 'snapshots/tables/fictional-real.gz'
+            shard = {'path': path, 'bytes': len(compressed), 'raw_bytes': len(raw), 'rows': len(rows),
+                     'sha256': sha(compressed), 'raw_sha256': sha(raw)}
+            catalog = enc([{'name': 'sample', 'columns': ['value'], 'count': len(rows),
+                            'rowid': True, 'sql': sql, 'shards': [shard]}])
+            files = {'snapshots/tables.json': {'bytes': len(catalog), 'sha256': sha(catalog)},
+                     path: {'bytes': len(compressed), 'sha256': sha(compressed)}}
+            return compare_parent_tables(db, catalog, files, lambda _: io.BytesIO(compressed))
+
+        rows = [[['integer', '1'], ['real', '0x1.8000000000000p+0']],
+                [['integer', '2'], ['real', '0x1.8000000000000p+0']],
+                [['integer', '3'], ['integer', '1']]]
+        self.assertEqual(compare(rows).status, 'PARENT_ROWS_PRESENT')
+        wrong = copy.deepcopy(rows)
+        wrong[0][1] = ['real', '0x1.8000000000001p+0']
+        self.assertEqual(compare(wrong).code, 'PARENT_ROW_CONFLICT')
+        wrong = copy.deepcopy(rows)
+        wrong[2][1] = ['real', '0x1.0000000000000p+0']
+        self.assertEqual(compare(wrong).code, 'PARENT_ROW_CONFLICT')
+        wrong = copy.deepcopy(rows)
+        wrong[0][0] = ['integer', '2']
+        self.assertEqual(compare(wrong).code, 'PARENT_ROW_CONFLICT')
+
+    def test_fictional_69_tables_86868_rows_with_1518_real_cells(self):
+        # The scale matches the independently reported historical comparison;
+        # the data below are entirely synthetic and prove no production match.
+        db = sqlite3.connect(':memory:')
+        self.addCleanup(db.close)
+        tables = []
+        shards = {}
+        total = real_total = 0
+        for index in range(69):
+            name = 'fictional_' + str(index)
+            sql = f'CREATE TABLE "{name}" (n INTEGER, value)'
+            db.execute(sql)
+            count = 1259 if index < 66 else 1258
+            rows = [(n, float(n) + 0.25 if n < 22 else None) for n in range(count)]
+            db.executemany(f'INSERT INTO "{name}" VALUES (?,?)', rows)
+            native = [ [['integer', str(n)], ['real', value.hex()] if value is not None else ['null', None]]
+                       for n, value in rows ]
+            raw = b''.join(enc(row) + b'\n' for row in native)
+            compressed = gzip.compress(raw, mtime=0)
+            path = f'snapshots/tables/fictional-{index}.jsonl.gz'
+            shards[path] = compressed
+            shard = {'path': path, 'bytes': len(compressed), 'raw_bytes': len(raw), 'rows': count,
+                     'sha256': sha(compressed), 'raw_sha256': sha(raw)}
+            tables.append({'name': name, 'columns': ['n', 'value'], 'count': count,
+                           'rowid': False, 'sql': sql, 'shards': [shard]})
+            total += count
+            real_total += 22
+        self.assertEqual((len(tables), total, real_total), (69, 86868, 1518))
+        db.commit()
+        db.execute('PRAGMA query_only=ON')
+        db.execute('BEGIN')
+        catalog = enc(tables)
+        files = {'snapshots/tables.json': {'bytes': len(catalog), 'sha256': sha(catalog)}}
+        files.update({path: {'bytes': len(data), 'sha256': sha(data)} for path, data in shards.items()})
+        result = compare_parent_tables(db, catalog, files, lambda path: io.BytesIO(shards[path]))
+        self.assertEqual((result.status, result.code), ('PARENT_ROWS_PRESENT', 'SEMANTIC_MERGE_UNVERIFIED'))
 
 
 class WorkspaceHistoryTests(unittest.TestCase):

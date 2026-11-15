@@ -5,8 +5,8 @@ reads a live database. The caller supplies bytes of a completed SQLite backup
 whose provenance and authorized acquisition it has verified separately. It is
 not a D0 adapter, a publisher, a source-body reader, or proof of deployment.
 
-Only capabilities, search and detail are exposed. Source/evidence, project
-relations, history, adoption and decision semantics remain unknown. Search is
+Only capabilities, search and detail are exposed by READ/0.1. Source/evidence,
+project relations, history, adoption and decision semantics remain unknown. Search is
 SQLite LIKE over title/body/record_id with escaped wildcards and literal spaces;
 the captured image makes process-local, context-bound page cursors stable.
 """
@@ -50,12 +50,23 @@ class WorkspaceSnapshotProvider:
     this class does not infer those assurances from a filename or hash. A 512 MiB
     default ceiling supports inputs larger than Dropbox's single-upload limit;
     callers may choose a smaller positive ceiling, but not exceed 512 MiB.
+
+    The opt-in ``lifecycle_enabled`` is an integration assertion by the host:
+    it must expose and display this provider's lifecycle response. The base
+    READ/0.1 object alone does not contain archive or merge information.
     """
 
-    def __init__(self, snapshot_bytes: bytes, *, max_bytes: int = _MAX_BYTES):
+    def __init__(self, snapshot_bytes: bytes, *, max_bytes: int = _MAX_BYTES,
+                 lifecycle_enabled: bool = False):
         self._lock = threading.RLock()
         self._db = None
         self._closed = False
+        # Opt in ONLY when the hosting UI also exposes and displays the separate
+        # lifecycle response for every listed/opened record. READ/0.1 has no
+        # archive timestamp or merge target field. The default fails closed.
+        if type(lifecycle_enabled) is not bool:
+            raise WorkspaceSnapshotError()
+        self._lifecycle_enabled = lifecycle_enabled
         self._key = secrets.token_bytes(32)
         self._cursors = {}
         if (type(max_bytes) is not int or not 1024 <= max_bytes <= _MAX_BYTES
@@ -165,9 +176,9 @@ class WorkspaceSnapshotProvider:
             raise WorkspaceSnapshotError()
         if not hmac.compare_digest(hashlib.sha256(body.encode('utf-8')).hexdigest(), digest):
             raise WorkspaceSnapshotError('VERSION_MISMATCH')
-        # No READ/0.1 field can preserve an archive timestamp or a merged target.
-        # Refuse to silently flatten those records into an ordinary active item.
-        if archived is not None or merged is not None:
+        # No READ/0.1 field can preserve these values. Only an explicitly
+        # lifecycle-capable hosting surface may serve the base representation.
+        if (archived is not None or merged is not None) and not self._lifecycle_enabled:
             raise WorkspaceSnapshotError()
         return {'record_id': ident, 'dataset_id': self._dataset['dataset_id'], 'original_ids': [],
                 'title': title, 'document_role': role,
@@ -176,6 +187,138 @@ class WorkspaceSnapshotProvider:
                 'source_status': 'UNKNOWN', 'project_relations_status': 'UNKNOWN',
                 'content_availability': 'AVAILABLE' if detail else 'NOT_REQUESTED',
                 'raw_text': body if detail else None, 'raw_text_sha256': digest if detail else None}
+
+    def lifecycle(self, *, dataset_id, snapshot_id, record_ids):
+        """Return unmodified archive and merge state for this exact snapshot.
+
+        This separate contract is required alongside READ/0.1 for a hosting UI
+        that opts into archived/merged records. It neither invents an active
+        status nor follows a merge; both source columns are preserved as-is.
+        The response does not establish history or restore support.
+        """
+        if (type(record_ids) is not list or len(record_ids) > 100
+                or any(type(ident) is not str or not ident for ident in record_ids)
+                or len(set(record_ids)) != len(record_ids)):
+            raise WorkspaceSnapshotError('INVALID_REQUEST')
+        with self._lock:
+            if self._closed or self._db is None:
+                raise WorkspaceSnapshotError('CONNECTION_UNAVAILABLE')
+            if not self._lifecycle_enabled:
+                raise WorkspaceSnapshotError('UNSUPPORTED_CONTRACT')
+            if (type(dataset_id) is not str or type(snapshot_id) is not str
+                    or dataset_id != self._dataset['dataset_id']
+                    or snapshot_id != self._dataset['snapshot_id']):
+                raise WorkspaceSnapshotError('VERSION_MISMATCH')
+            records = []
+            for ident in record_ids:
+                row = self._db.execute('SELECT archived_at,merged_into FROM work_records WHERE record_id=?',
+                                       (ident,)).fetchone()
+                if row is None:
+                    raise WorkspaceSnapshotError('ITEM_NOT_FOUND')
+                archived, merged = row
+                if (archived is not None and not isinstance(archived, str)
+                        or merged is not None and (not isinstance(merged, str) or not merged)):
+                    raise WorkspaceSnapshotError()
+                records.append({'record_id': ident, 'archived_at': archived, 'merged_into': merged})
+            return {'contract_version': 'UTT-WORKSPACE-LIFECYCLE/0.1',
+                    'snapshot': self._dataset.copy(), 'records': records}
+
+    def workspace_features(self):
+        """Describe this separate local workspace surface, not READ/0.1 writes."""
+        with self._lock:
+            return {'contract_version': 'UTT-WORKSPACE-FEATURES/0.1',
+                    'read_detail': bool(self._lifecycle_enabled and not self._closed and self._db is not None),
+                    'writes_supported': False}
+
+    def read_workspace_detail(self, q):
+        """Read extended details in the exact immutable capture used by READ/0.1."""
+        def failed(code):
+            return {'contract_version': 'UTT-WORKSPACE-DETAIL/0.1', 'operation': 'detail',
+                    'status': 'ERROR', 'error': {'code': code}}
+        if (type(q) is not dict or set(q) != {'contract_version', 'operation', 'dataset_id', 'snapshot_id', 'record_id'}
+                or q['contract_version'] != 'UTT-WORKSPACE-READ/0.1' or q['operation'] != 'detail'
+                or any(type(q[k]) is not str or not q[k] for k in ('dataset_id', 'snapshot_id', 'record_id'))):
+            return failed('INVALID_REQUEST')
+        with self._lock:
+            if self._closed or self._db is None:
+                return failed('CONNECTION_UNAVAILABLE')
+            if not self._lifecycle_enabled:
+                return failed('UNSUPPORTED_CONTRACT')
+            if q['dataset_id'] != self._dataset['dataset_id'] or q['snapshot_id'] != self._dataset['snapshot_id']:
+                return failed('VERSION_MISMATCH')
+            try:
+                from app.workspace_extended_read import read_workspace_record
+                result = read_workspace_record(self._db, q['record_id'])
+                if type(result) is not dict or result.get('contract_version') != 'UTT-WORKSPACE-DETAIL/0.1':
+                    return failed('READ_FAILED')
+                if result.get('status') != 'OK':
+                    error_value = result.get('error')
+                    code = error_value.get('code') if type(error_value) is dict else None
+                    if code not in ('INVALID_REQUEST', 'ITEM_NOT_FOUND', 'DATA_INTEGRITY', 'CONTENT_MISMATCH',
+                                    'UNSUPPORTED_SCHEMA', 'UNSUPPORTED_VALUE', 'READ_FAILED', 'RESULT_LIMIT_EXCEEDED'):
+                        code = 'READ_FAILED'
+                    return failed(code)
+                actual = self.lifecycle(dataset_id=q['dataset_id'], snapshot_id=q['snapshot_id'],
+                                        record_ids=[q['record_id']])['records'][0]
+                record = result.get('record')
+                if (type(record) is not dict or record.get('record_id') != q['record_id']
+                        or record.get('archived_at') != actual['archived_at']
+                        or record.get('merged_into') != actual['merged_into']):
+                    return failed('DATA_INTEGRITY')
+                return {**result, 'operation': 'detail', 'dataset_id': q['dataset_id'],
+                        'snapshot_id': q['snapshot_id'], 'record_id': q['record_id']}
+            except WorkspaceSnapshotError as exc:
+                return failed(exc.code)
+            except Exception:
+                return failed('READ_FAILED')
+
+    def workspace_catalog(self, q):
+        """List projects, topics, or members within this immutable capture."""
+        def failed(code):
+            return {'contract_version': 'UTT-WORKSPACE-DETAIL/0.1', 'status': 'ERROR',
+                    'error': {'code': code}}
+        if type(q) is not dict:
+            return failed('INVALID_REQUEST')
+        operation = q.get('operation')
+        members = operation in ('project_members', 'topic_members')
+        fields = {'contract_version', 'operation', 'dataset_id', 'snapshot_id', 'limit', 'offset'}
+        if members:
+            fields.add('identifier')
+        if (set(q) != fields or q['contract_version'] != 'UTT-WORKSPACE-READ/0.1'
+                or operation not in ('projects', 'topics', 'project_members', 'topic_members')
+                or members and (type(q['identifier']) is not str or not q['identifier'])
+                or any(type(q[k]) is not str or not q[k] for k in ('dataset_id', 'snapshot_id'))
+                or type(q['limit']) is not int or not 1 <= q['limit'] <= 1000
+                or type(q['offset']) is not int or not 0 <= q['offset'] <= 2**31 - 1):
+            return failed('INVALID_REQUEST')
+        with self._lock:
+            if self._closed or self._db is None:
+                return failed('CONNECTION_UNAVAILABLE')
+            if not self._lifecycle_enabled:
+                return failed('UNSUPPORTED_CONTRACT')
+            if q['dataset_id'] != self._dataset['dataset_id'] or q['snapshot_id'] != self._dataset['snapshot_id']:
+                return failed('VERSION_MISMATCH')
+            try:
+                from app.workspace_extended_read import list_workspace_catalog, list_workspace_members
+                if members:
+                    kind = 'project' if operation == 'project_members' else 'topic'
+                    result = list_workspace_members(self._db, kind, q['identifier'],
+                                                    limit=q['limit'], offset=q['offset'])
+                else:
+                    result = list_workspace_catalog(self._db, operation, limit=q['limit'], offset=q['offset'])
+                if type(result) is not dict or result.get('contract_version') != 'UTT-WORKSPACE-DETAIL/0.1':
+                    return failed('READ_FAILED')
+                if result.get('status') != 'OK':
+                    value = result.get('error')
+                    code = value.get('code') if type(value) is dict else None
+                    if code not in ('INVALID_REQUEST', 'ITEM_NOT_FOUND', 'DATA_INTEGRITY', 'UNSUPPORTED_SCHEMA', 'UNSUPPORTED_VALUE',
+                                    'READ_FAILED', 'RESULT_LIMIT_EXCEEDED'):
+                        code = 'READ_FAILED'
+                    return failed(code)
+                return {**result, 'operation': q['operation'], 'dataset_id': q['dataset_id'],
+                        'snapshot_id': q['snapshot_id']}
+            except Exception:
+                return failed('READ_FAILED')
 
     def read(self, q, sort='id_asc'):
         op = q.get('operation') if isinstance(q, dict) else None

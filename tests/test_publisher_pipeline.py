@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from app.publisher_pipeline import publish_snapshot
 from app.publisher_reader import ACTIVE
@@ -136,10 +137,28 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.transport.writes, [])
         self.assertEqual(before, self.transport.objects[ACTIVE])
 
-    def test_reader_cannot_represent_archived_record(self):
+    def test_reader_validates_and_publishes_archived_record(self):
         self.writer.execute("UPDATE work_records SET archived_at='fictional-time'")
         self.writer.commit()
         result = self.run_pipeline()
+        self.assertEqual((result.status, result.code), ('PUBLISHED', 'PUBLISHED'))
+
+    def test_reader_validates_and_publishes_merged_record(self):
+        self.writer.execute('''INSERT INTO work_records(record_id,title,body,body_sha256,
+                            document_role,review_status,adoption_status)
+                            SELECT 'fictional-target',title,body,body_sha256,
+                            document_role,review_status,adoption_status FROM work_records
+                            WHERE record_id='fictional-record' ''')
+        self.writer.execute("UPDATE work_records SET merged_into='fictional-target' WHERE record_id='fictional-record'")
+        self.writer.commit()
+        result = self.run_pipeline()
+        self.assertEqual((result.status, result.code), ('PUBLISHED', 'PUBLISHED'))
+
+    def test_preflight_rejects_extended_detail_with_wrong_lifecycle(self):
+        from app.publisher_workspace_reader import WorkspaceSnapshotProvider
+        forged = {'status': 'OK', 'record': {'version': 1, 'archived_at': 'forged', 'merged_into': None}}
+        with patch.object(WorkspaceSnapshotProvider, 'read_workspace_detail', return_value=forged):
+            result = self.run_pipeline()
         self.assertEqual(result.code, 'READER_UNSUPPORTED')
         self.assertEqual(self.transport.writes, [])
 
@@ -178,6 +197,62 @@ class PipelineTests(unittest.TestCase):
         self.assertNotEqual(result.status, 'PUBLISHED')
         self.assertFalse(any(kind == 'cas' for kind, _ in self.transport.writes))
         self.assertEqual(self.transport.objects[ACTIVE], original)
+
+    def test_active_workspace_is_downloaded_again_after_cas(self):
+        class TrackingTransport(FakeTransport):
+            def __init__(self, objects):
+                super().__init__(objects)
+                self.after_cas = False
+                self.read_workspace_after_cas = False
+
+            def update_if_revision(self, path, data, rev):
+                super().update_if_revision(path, data, rev)
+                self.after_cas = True
+
+            def download(self, path, sink, *, max_bytes):
+                if self.after_cas and '/workspace/snapshot-' in path:
+                    self.read_workspace_after_cas = True
+                return super().download(path, sink, max_bytes=max_bytes)
+
+        self.transport = TrackingTransport(initial_objects(self.writer))
+        result = self.run_pipeline()
+        self.assertEqual(result.code, 'PUBLISHED')
+        self.assertTrue(self.transport.read_workspace_after_cas)
+
+    def test_corrupted_workspace_after_cas_never_reports_success(self):
+        class CorruptAfterCAS(FakeTransport):
+            def update_if_revision(self, path, data, rev):
+                super().update_if_revision(path, data, rev)
+                active = json.loads(data)
+                manifest = json.loads(self.objects[active['root'] + 'system/manifest.json'])
+                target = active['root'] + manifest['utt_workspace']['path']
+                self.objects[target] = b'x' * len(self.objects[target])
+
+        self.transport = CorruptAfterCAS(initial_objects(self.writer))
+        result = self.run_pipeline()
+        self.assertEqual((result.status, result.code), ('NOT_VERIFIED', 'ACTIVE_DB_UNVERIFIED'))
+        self.assertEqual(sum(kind == 'cas' for kind, _ in self.transport.writes), 1)
+
+    def test_active_revision_changed_during_workspace_read_is_unverified(self):
+        class ChangeActiveAfterRead(FakeTransport):
+            def __init__(self, objects):
+                super().__init__(objects)
+                self.after_cas = False
+
+            def update_if_revision(self, path, data, rev):
+                super().update_if_revision(path, data, rev)
+                self.after_cas = True
+
+            def download(self, path, sink, *, max_bytes):
+                result = super().download(path, sink, max_bytes=max_bytes)
+                if self.after_cas and '/workspace/snapshot-' in path:
+                    self.revision = 'rev-fictional-other'
+                return result
+
+        self.transport = ChangeActiveAfterRead(initial_objects(self.writer))
+        result = self.run_pipeline()
+        self.assertEqual((result.status, result.code), ('NOT_VERIFIED', 'ACTIVE_DB_UNVERIFIED'))
+        self.assertEqual(sum(kind == 'cas' for kind, _ in self.transport.writes), 1)
 
 
 if __name__ == '__main__':

@@ -2,8 +2,9 @@
 
 The operator must confirm the existing App Folder and start authentication.
 Only read scopes are requested. No source paths, credentials, record contents,
-or remote metadata are printed; the snapshot remains in memory. The UI's
-unsupported source/history operations stay unsupported.
+or remote metadata are printed; the snapshot remains in memory. Workspace
+links and history have a separate read contract; original source-body access
+and editing remain unsupported.
 """
 from __future__ import annotations
 
@@ -48,7 +49,8 @@ def load_verified_workspace(transport):
         raise WorkspaceSnapshotError('CONNECTION_UNAVAILABLE') from None
     if observed != (resolved.active_bytes, resolved.active_revision):
         raise WorkspaceSnapshotError('VERSION_MISMATCH')
-    return WorkspaceSnapshotProvider(reply[0])
+    # The hosting UI reads lifecycle status alongside each list and detail.
+    return WorkspaceSnapshotProvider(reply[0], lifecycle_enabled=True)
 
 
 def _secret(prompt):
@@ -95,7 +97,7 @@ def main(argv=None):
         session = None
         server = make_server(args.port, mode='readonly', provider=ReadOnlyAdapter(provider.read))
         print(f'Workspace reader is ready at http://127.0.0.1:{server.server_port}/', flush=True)
-        print('Read-only snapshot; source/history and editing are not connected.', flush=True)
+        print('Read-only snapshot; original source bodies and editing are not connected.', flush=True)
         server.serve_forever()
         return 0
     except KeyboardInterrupt:

@@ -62,7 +62,12 @@
     "tests/test_publisher_read_transport.py",
     "tests/test_publisher_windows.py",
     "tests/test_publisher_workspace_bridge.py",
-    "source/tests/publisher_workspace_browser.py"
+    "source/tests/publisher_workspace_browser.py",
+    "tests/test_workspace_extended_read.py",
+    "tests/test_workspace_http.py",
+    "tests/test_workspace_verify_windows.py",
+    "tests/test_workspace_write.py",
+    "source/tests/workspace_client.test.mjs"
   ],
   "development_prefixes": [
     "app/",

@@ -5,7 +5,7 @@ const button=(text,action,cls)=>{const n=el('button',text,cls);n.type='button';n
 const labels={UNREVIEWED:'미검토',HELD:'보류',EVIDENCE_REQUESTED:'근거 요청',CANCELLED:'취소',OBSERVED:'관측됨',CONFLICTING:'관측 충돌',NONE:'없음',DRAFT:'초안',CONFLICT:'충돌',NOT_APPROVED:'미승인',UNKNOWN:'미확인',AVAILABLE:'이용 가능',MISSING:'누락 확인',NOT_REQUESTED:'미요청',INACCESSIBLE:'접근 불가',USER_CONFIRMED:'사용자 확정',UNRESOLVED:'미해결'};
 const label=v=>v==null?'미확인':labels[v]??v;
 const client=new ReadClient(), listGate=new LatestRequest(), detailGate=new LatestRequest(), bootGate=new LatestRequest();
-let page=0,cursors=[null],nextCursor=null,projects=[],mode=null,capabilities=null,features=null,providerSort='id_asc',listOriginId=null,listScrollY=0,currentDetailId=null,timer;
+let page=0,cursors=[null],nextCursor=null,projects=[],mode=null,capabilities=null,features=null,workspaceFeature=null,providerSort='id_asc',listOriginId=null,listScrollY=0,currentDetailId=null,timer;
 const NS='utt.synthetic.session.v1';
 const sourceGates=new Set();
 function cancelSources(){for(const gate of sourceGates)gate.cancel();sourceGates.clear();}
@@ -69,8 +69,8 @@ function updateControls(){
 function hideDetail(){cancelSources();detailGate.cancel();currentDetailId=null;$('library-view').classList.remove('is-reading');$('detail').hidden=true;$('detail').replaceChildren();$('list-view').hidden=false;}
 function invalidate(){++navigationEpoch;listNeedsReset=true;pageResultValid=false;renderHome();clearTimeout(timer);listGate.cancel();$('results').setAttribute('aria-busy','false');hideDetail();nextCursor=null;$('results').replaceChildren();$('next').disabled=true;$('prev').disabled=true;}
 async function bootstrap(){
- invalidate();const token=bootGate.begin();client.dataset=null;capabilities=null;features=null;mode=null;projects=[];pageRecords=[];pageResultValid=false;visited=[];client.scenario='normal';renderHome();renderConversations();
- $('scenario').value='normal';$('synthetic-scenarios').hidden=true;$('dataset-kind').textContent='미연결';
+ invalidate();const token=bootGate.begin();client.dataset=null;capabilities=null;features=null;workspaceFeature=null;mode=null;projects=[];pageRecords=[];pageResultValid=false;visited=[];client.scenario='normal';renderHome();renderConversations();
+ $('scenario').value='normal';$('synthetic-scenarios').hidden=true;$('dataset-kind').textContent='미연결';$('workspace-catalog').hidden=true;$('workspace-catalog-content').replaceChildren();
  $('project').replaceChildren(new Option('전체 프로젝트 · 미분류 포함',''));
  $('projects').replaceChildren();$('components').replaceChildren();$('dataset').textContent='연결 확인 중…';
  $('mode').textContent='연결 확인 중 · 운영 승인 없음';$('connection-state').textContent='공급자: 확인 중 · 실제 정본: 미확인';
@@ -83,6 +83,12 @@ async function bootstrap(){
   client.dataset=cap.snapshot;capabilities=cap.result;
   const featureResponse=await client.readFeatures(token.signal);if(!token.current())return;
   features=featureResponse;
+  if(!synthetic()&&cap.snapshot.dataset_kind==='WORKSPACE_SNAPSHOT'){
+   try{workspaceFeature=await client.workspaceFeatures(token.signal);}
+   catch(error){if(error.name==='AbortError')return;workspaceFeature=null;}
+   if(!token.current())return;
+  }
+  if(workspaceFeature?.read_detail)mountWorkspaceCatalog(cap.snapshot,token);
   if(filterState('query')==='UNSUPPORTED')$('search').value='';
   if(!filterSupported('project'))$('project').value='';
   $('mode').textContent=synthetic()?'합성 개발 자료 · 운영 연결 없음':'읽기 공급자 응답 확인 · 운영 승인 없음';
@@ -153,6 +159,12 @@ async function search(reset=false){
  try{
   const d=await client.read('search',{query:filterState('query')==='UNSUPPORTED'?null:$('search').value||null,project_id:filterSupported('project')?$('project').value||null:null,document_role:filterSupported('document_role')?$('role').value||null:null,review_status:filterSupported('review_status')?$('review').value||null:null,cursor:cursors[page],page_size:pageSize()},token.signal);
   if(!token.current())return false;
+  const workspace=d.snapshot.dataset_kind==='WORKSPACE_SNAPSHOT';let lifecycle=null;
+  if(workspace&&workspaceFeature?.read_detail&&d.result.records.length){
+   try{lifecycle=await client.workspaceLifecycle({dataset_id:d.snapshot.dataset_id,snapshot_id:d.snapshot.snapshot_id,record_ids:d.result.records.map(r=>r.record_id)},token.signal);}
+   catch(error){if(error.name==='AbortError'||!token.current())return false;}
+   if(!token.current())return false;
+  }
   pageRecords=d.result.records;pageResultValid=true;
   nextCursor=d.result.page.next_cursor;$('page-number').textContent=`${page+1} 페이지`;$('count').textContent=`이 페이지 ${d.result.records.length}건 · 한 번에 ${d.result.page.page_size}건`;
   for(const r of d.result.records){
@@ -160,6 +172,12 @@ async function search(reset=false){
    const card=el('article',undefined,'record');const b=button(r.title,()=>{listOriginId=r.record_id;listScrollY=window.scrollY;showDetail(r.record_id);},'record-title');b.dataset.recordId=r.record_id;b.disabled=!supports('detail');
    const cardTop=el('div',undefined,'record-heading');cardTop.append(el('span',roleName(r.document_role),'eyebrow'),el('span',label(r.state.review),'review-label'));
    card.append(cardTop,b);
+   if(workspace){
+    const state=lifecycle?.get(r.record_id);
+    let text='보관·병합 상태 미확인';
+    if(state){const statuses=[];if(state.archived_at!==null)statuses.push(`보관: ${state.archived_at||'빈 문자열'}`);if(state.merged_into!==null)statuses.push(`병합 대상: ${state.merged_into||'빈 문자열'}`);text=statuses.length?statuses.join(' · '):'보관·병합 상태 없음';}
+    card.append(el('p',text,state?'workspace-lifecycle':'workspace-lifecycle warning'));
+   }
    if(r.display_summary!==null&&r.display_summary!=='')card.append(el('p',r.display_summary,'record-summary'));
    card.append(proofDetails('자료 정보와 상태',el('p',`자료 ID: ${r.record_id}`,'muted'),el('p',`원래 자료 유형: ${r.document_role}`,'muted'),summaryStates(r)));
    if(!supports('detail'))card.append(el('p','공급자가 상세 조회를 지원하지 않습니다.','muted'));
@@ -246,10 +264,111 @@ async function showDetail(id){
   if(supports('related_history'))historyOk=await loadHistory();
   else historyPages.append(el('p','공급자가 이력 조회를 지원하지 않습니다.'));
   if(!token.current())return;
+  if(workspaceFeature?.read_detail){
+   const ws=el('section',undefined,'workspace-detail');ws.append(el('h3','작업 DB의 연결과 이력'),el('p','작업 DB 상세를 확인하는 중…','muted'));main.append(ws);
+   try{
+    const extra=await client.workspaceDetail({dataset_id:d.snapshot.dataset_id,snapshot_id:d.snapshot.snapshot_id,record_id:id},token.signal);
+    if(!token.current()||currentDetailId!==id)return;
+    renderWorkspaceDetail(ws,extra);
+   }catch(error){
+    if(!token.current()||currentDetailId!==id||error.name==='AbortError')return;
+    ws.replaceChildren(el('h3','작업 DB의 연결과 이력'),el('p',`작업 DB 상세 조회 실패: ${errorText(error)}`,'error'));
+   }
+  }
   if(synthetic())main.append(proofDetails('합성 검토 연습 (이 탭에서만)',simulationUI(id)));
   context.append(el('p','정본 승인·실제 저장·동기화는 명령 계약 미정으로 지원하지 않습니다.','warning'));
   if(historyOk)completeNotice();
  }catch(error){if(token.current()&&error.name!=='AbortError'){box.replaceChildren(button('← 검색 결과로',back),el('p','상세를 읽지 못했습니다.'));failure(error);}}
+}
+function renderWorkspaceDetail(target,data){
+ // Render original values as text, retaining NULL, empty strings and every row.
+ target.replaceChildren(el('h3','작업 DB의 연결과 이력'));
+ const state=el('dl',undefined,'states');
+ for(const [key,name] of [['version','자료 버전'],['review_status','검토 상태'],['adoption_status','채택 상태'],['decision_status','결정 상태'],['source_kind','출처 구분'],['archived_at','보관 시각'],['merged_into','병합 대상']]){
+  const value=data.record[key];state.append(el('dt',name),el('dd',value===null?'NULL':value===''?'빈 문자열':value===undefined?'미제공':String(value)));
+ }
+ target.append(state,el('p','아래 정보는 이 작업 DB의 기록입니다. 원출처 본문이나 승인 여부를 추가로 추정하지 않습니다.','muted'));
+ const groups=[['projects','프로젝트 관계'],['topics','주제 관계'],['sources','출처 근거'],['decisions','결정'],['revisions','자료 버전 이력'],['events','사건 이력'],['notes','노트'],['tags','태그'],['proposals','제안'],['merged_children','이 자료로 병합된 기록']];
+ for(const [key,title] of groups){
+  const rows=data[key],section=el('details',undefined,'proof-details');
+  section.append(el('summary',`${title} · ${rows.length}건`));
+  if(!rows.length)section.append(el('p','이 작업 DB의 해당 조회 범위에 항목이 없습니다.'));
+  rows.forEach((row,index)=>{
+   const card=el('section',undefined,'workspace-row');card.append(el('h4',`${title} ${index+1}`));
+   appendWorkspaceFields(card,row);section.append(card);
+  });
+  target.append(section);
+ }
+}
+const workspaceFieldNames={
+ link:'관계',project:'프로젝트',topic:'주제',link_id:'관계 ID',record_id:'자료 ID',project_id:'프로젝트 ID',topic_id:'주제 ID',
+ role:'관계 역할',scope:'관계 범위',basis:'관계 근거',original_evidence_id:'원래 근거 ID',added_at:'추가 시각',archived_at:'보관 시각',
+ name:'이름',state:'상태',provenance:'출처 구분',parent_id:'상위 ID',original_axis:'원래 분류축',notes:'설명',
+ evidence_id:'근거 ID',source_id:'출처 ID',locator:'출처 위치',offset_unit:'좌표 단위',validated_in_this_workspace:'이 작업실의 검증',
+ decision_id:'결정 ID',decision:'결정 상태',explanation:'설명',actor:'작성 주체',user_authorized:'사용자 승인',evidence_message_ref:'근거 메시지 ID',
+ created_at:'작성 시각',updated_at:'수정 시각',version:'버전',title:'제목',body:'본문',body_sha256:'본문 SHA-256',summary:'요약',
+ review_status:'검토 상태',adoption_status:'채택 상태',decision_status:'결정 상태',merged_into:'병합 대상',event_id:'사건 ID',sequence:'사건 순서',
+ event_kind:'사건 종류',record_version:'자료 버전',authorization_basis:'승인 근거',reason:'사유',detail_json:'사건 내용 (원형)',occurred_at:'발생 시각',
+ preceding_hash:'이전 사건 해시',event_hash:'사건 해시',note_id:'노트 ID',author:'작성 주체',note_text:'노트',tag_id:'태그 ID',
+ proposal_id:'제안 ID',proposed_action:'제안 동작',proposal_json:'제안 내용 (원형)',proposer:'제안자',resolved_at:'처리 시각',status:'상태'
+};
+function appendWorkspaceFields(target,row){
+ let values=el('dl',undefined,'states');
+ for(const [key,value] of Object.entries(row)){
+  const name=workspaceFieldNames[key]??key;
+  if(value&&typeof value==='object'&&!Array.isArray(value)){
+   if(values.childNodes.length)target.append(values);
+   target.append(el('h5',name));appendWorkspaceFields(target,value);values=el('dl',undefined,'states');continue;
+  }
+  let text=value===null?'NULL (기록되지 않음)':value===''?'빈 문자열':String(value);
+  if(key==='validated_in_this_workspace'&&value===0)text='0 · 이 작업실에서 미검증';
+  if(key==='validated_in_this_workspace'&&value===1)text='1 · 이 작업실에서 검증';
+  if(key==='user_authorized'&&value===0)text='0 · 사용자 승인 안 됨';
+  if(key==='user_authorized'&&value===1)text='1 · 사용자 승인됨';
+  values.append(el('dt',name),el('dd',text));
+ }
+ if(values.childNodes.length)target.append(values);
+}
+function mountWorkspaceCatalog(scope,bootToken){
+ const panel=$('workspace-catalog'),content=$('workspace-catalog-content');panel.hidden=false;content.replaceChildren();
+ function group(operation,title){
+  const area=el('details'),out=el('div'),controls=el('div');let loaded=false;const gate=new LatestRequest();
+  area.append(el('summary',title),out,controls);content.append(area);
+  async function load(offset){
+   const token=gate.begin();controls.replaceChildren(el('p','불러오는 중…','muted'));
+   try{
+    const result=await client.workspaceCatalog(scope,operation,{offset},token.signal);
+    if(!bootToken.current()||!token.current())return;
+    if(!result.items.length&&offset===0)out.append(el('p','이 작업 DB에 항목이 없습니다.','muted'));
+    for(const item of result.items){
+     const id=operation==='projects'?item.project_id:item.topic_id;
+     const entry=el('details'),body=el('div'),memberControls=el('div');let requested=false;const memberGate=new LatestRequest();
+     entry.append(el('summary',item.name),body,memberControls);out.append(entry);
+     async function loadMembers(offset){
+      const memberToken=memberGate.begin();memberControls.replaceChildren(el('p','연결 자료 확인 중…','muted'));
+      try{
+       const op=operation==='projects'?'project_members':'topic_members';
+       const members=await client.workspaceCatalog(scope,op,{identifier:id,offset},memberToken.signal);
+       if(!bootToken.current()||!memberToken.current())return;
+       if(!members.items.length&&offset===0)body.append(el('p','이 작업 DB에 연결된 자료가 없습니다.','muted'));
+       for(const member of members.items){
+        const row=el('section',undefined,'workspace-row');
+        row.append(button(member.record.title,()=>{setStudioView('library',{focus:false,refresh:false});listOriginId=null;listScrollY=window.scrollY;showDetail(member.record.record_id);},'record-title'));
+        const states=[];if(member.record.archived_at!==null)states.push(`보관: ${member.record.archived_at||'빈 문자열'}`);if(member.record.merged_into!==null)states.push(`병합 대상: ${member.record.merged_into||'빈 문자열'}`);
+        row.append(el('p',states.length?states.join(' · '):'보관·병합 상태 없음','muted'));
+        const proof=el('details',undefined,'proof-details');proof.append(el('summary','연결 근거'));appendWorkspaceFields(proof,member.link);row.append(proof);body.append(row);
+       }
+       memberControls.replaceChildren();if(members.next_offset!==null)memberControls.append(button('다음 연결 자료',()=>loadMembers(members.next_offset),'text-link'));
+      }catch(error){if(bootToken.current()&&memberToken.current()&&error.name!=='AbortError')memberControls.replaceChildren(el('p',`연결 자료 조회 실패: ${errorText(error)}`,'error'),button('다시 시도',()=>loadMembers(offset),'text-link'));}
+     }
+     entry.addEventListener('toggle',()=>{if(entry.open&&!requested){requested=true;loadMembers(0);}});
+    }
+    controls.replaceChildren();if(result.next_offset!==null)controls.append(button('다음 항목',()=>load(result.next_offset),'text-link'));
+   }catch(error){if(bootToken.current()&&token.current()&&error.name!=='AbortError')controls.replaceChildren(el('p',`목록 조회 실패: ${errorText(error)}`,'error'),button('다시 시도',()=>load(offset),'text-link'));}
+  }
+  area.addEventListener('toggle',()=>{if(area.open&&!loaded){loaded=true;load(0);}});
+ }
+ group('projects','프로젝트');group('topics','주제');
 }
 // Each card owns its request generation; the detail generation also guards
 // responses arriving after record navigation, filter changes or list return.

@@ -76,6 +76,29 @@ def _copy_verified(transport, path, size, digest, directory):
         raise
 
 
+def _verify_activated_workspace(transport, fetch, current, candidate, size, digest, directory):
+    """Re-read the active workspace after activation without exposing its bytes.
+
+    The observed active bytes and revision are checked again after the payload
+    read. This detects observed changes, not a cross-object transaction or an
+    unobserved ABA on Dropbox.
+    """
+    try:
+        entry = current.manifest.workspace
+        if (current.active_bytes != candidate.active_bytes or entry is None
+                or entry.path != candidate.workspace_path
+                or entry.size != size or entry.sha256 != digest):
+            raise _Stop('ACTIVE_DB_UNVERIFIED')
+        with _copy_verified(transport, current.root + entry.path, size, digest, directory):
+            pass
+        if fetch(ACTIVE) != (current.active_bytes, current.active_revision):
+            raise _Stop('ACTIVE_DB_UNVERIFIED')
+    except Exception:
+        # CAS may already have succeeded; callers must not assume rollback or
+        # blindly repeat it when the activated DB cannot be re-read.
+        raise _Stop('ACTIVE_DB_UNVERIFIED') from None
+
+
 def _preflight_reader(snapshot):
     size, digest = snapshot.describe_snapshot()
     if size > _WORKSPACE_LIMIT:
@@ -83,7 +106,9 @@ def _preflight_reader(snapshot):
     raw = snapshot.path.read_bytes()
     if len(raw) != size or hashlib.sha256(raw).hexdigest() != digest:
         raise _Stop('SNAPSHOT_CHANGED')
-    provider = WorkspaceSnapshotProvider(raw)
+    # This preflight matches the workspace server's lifecycle-capable surface;
+    # never permit publication merely because the older READ/0.1 view succeeded.
+    provider = WorkspaceSnapshotProvider(raw, lifecycle_enabled=True)
     try:
         cap = provider.read(request('capabilities'))
         if cap.get('status') != 'OK':
@@ -91,25 +116,37 @@ def _preflight_reader(snapshot):
         scope = {'dataset_id': cap['snapshot']['dataset_id'], 'snapshot_id': cap['snapshot']['snapshot_id']}
         cursor = None
         seen = set()
-        while True:
-            page = provider.read(request('search', page_size=100, cursor=cursor, **scope))
-            if page.get('status') != 'OK':
-                raise _Stop('READER_UNSUPPORTED')
-            for record in page['result']['records']:
-                ident = record['record_id']
-                if ident in seen:
-                    raise _Stop('READER_UNSUPPORTED')
-                seen.add(ident)
-                detail = provider.read(request('detail', record_id=ident, **scope))
-                if detail.get('status') != 'OK':
-                    raise _Stop('READER_UNSUPPORTED')
-            next_cursor = page['result']['page']['next_cursor']
-            if next_cursor is None:
-                break
-            if next_cursor == cursor:
-                raise _Stop('READER_UNSUPPORTED')
-            cursor = next_cursor
         with closing(snapshot.open_readonly()) as conn:
+            while True:
+                page = provider.read(request('search', page_size=100, cursor=cursor, **scope))
+                if page.get('status') != 'OK':
+                    raise _Stop('READER_UNSUPPORTED')
+                records = page['result']['records']
+                lifecycle = provider.lifecycle(**scope, record_ids=[r['record_id'] for r in records])
+                if lifecycle.get('snapshot') != cap['snapshot'] or len(lifecycle.get('records', [])) != len(records):
+                    raise _Stop('READER_UNSUPPORTED')
+                for record, state in zip(records, lifecycle['records']):
+                    ident = record['record_id']
+                    if ident in seen or state.get('record_id') != ident:
+                        raise _Stop('READER_UNSUPPORTED')
+                    seen.add(ident)
+                    detail = provider.read(request('detail', record_id=ident, **scope))
+                    extended = provider.read_workspace_detail({'contract_version': 'UTT-WORKSPACE-READ/0.1',
+                        'operation': 'detail', 'record_id': ident, **scope})
+                    source = conn.execute('SELECT version,archived_at,merged_into FROM work_records WHERE record_id=?',
+                                          (ident,)).fetchone()
+                    value = extended.get('record')
+                    if (detail.get('status') != 'OK' or extended.get('status') != 'OK'
+                            or type(value) is not dict or source is None
+                            or (value.get('version'), value.get('archived_at'), value.get('merged_into')) != source
+                            or (state.get('archived_at'), state.get('merged_into')) != source[1:]):
+                        raise _Stop('READER_UNSUPPORTED')
+                next_cursor = page['result']['page']['next_cursor']
+                if next_cursor is None:
+                    break
+                if next_cursor == cursor:
+                    raise _Stop('READER_UNSUPPORTED')
+                cursor = next_cursor
             if len(seen) != conn.execute('SELECT count(*) FROM work_records').fetchone()[0]:
                 raise _Stop('READER_UNSUPPORTED')
     finally:
@@ -229,12 +266,16 @@ def publish_snapshot(snapshot, transport, session):
             if (current.active_bytes != parent.active_bytes
                     or current.active_revision != parent.active_revision):
                 raise _Stop('ACTIVE_CHANGED')
+            _verify_activated_workspace(transport, fetch, current, candidate, size, digest,
+                                        snapshot.path.parent)
             return PublicationResult('PUBLISHED', 'ALREADY_ACTIVE')
         activation_started = True
         transport.update_if_revision(ACTIVE, candidate.active_bytes, parent.active_revision)
         current = resolve_active(fetch)
         if current.active_bytes != candidate.active_bytes:
             raise _Stop('ACTIVATION_NOT_CONFIRMED')
+        _verify_activated_workspace(transport, fetch, current, candidate, size, digest,
+                                    snapshot.path.parent)
         return PublicationResult('PUBLISHED', 'PUBLISHED')
     except _Stop as exc:
         return PublicationResult('NOT_VERIFIED', exc.code)

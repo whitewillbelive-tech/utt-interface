@@ -7,10 +7,11 @@ authenticate Dropbox, perform network or filesystem access, infer approvals,
 merge data, or activate a generation.  All returned errors are fixed codes and
 contain no table names, paths, source values, identifiers, or hashes.
 
-The handoff specifies integer strings, text, and null cells but does not provide
-the native real/blob converter.  Those cells are therefore rejected, never
-guessed, except that the two explicitly documented FTS *physical shadow* tables
-are treated as opaque only when the logical item_fts table is also checked.
+The management verification established native hexadecimal floating-point
+strings for REAL cells. Compare finite values by their IEEE-754 binary64 bytes,
+keeping REAL distinct from INTEGER. The native BLOB converter is unconfirmed and
+remains unsupported, except that the two explicitly documented FTS *physical
+shadow* tables are treated as opaque only when logical item_fts is also checked.
 A pass means that the checked historical row occurrences are present; it is not
 proof that local additions, decisions, or concurrent changes are safe.
 """
@@ -22,6 +23,7 @@ import gzip
 import hashlib
 import hmac
 import json
+import math
 import re
 import sqlite3
 import struct
@@ -29,6 +31,7 @@ from typing import Any, BinaryIO, Callable
 
 _HEX = re.compile(r'[0-9a-f]{64}\Z')
 _INT = re.compile(r'(?:0|-[1-9][0-9]*|[1-9][0-9]*)\Z')
+_REAL_HEX = re.compile(r'[+-]?0[xX](?:[0-9a-fA-F]+(?:\.[0-9a-fA-F]*)?|\.[0-9a-fA-F]+)[pP][+-]?[0-9]+\Z')
 _PATH = re.compile(r'snapshots/[A-Za-z0-9_./-]+\Z')
 _MAX_CATALOG = 8 * 1024 * 1024
 _MAX_SHARD = 512 * 1024 * 1024
@@ -89,7 +92,11 @@ def _hash_row(values: list[tuple[str, Any]]) -> bytes:
             kind, data = b'I', str(value).encode('ascii')
         elif tag == 'text' and type(value) is str:
             kind, data = b'T', value.encode('utf-8', 'strict')
-        elif tag in ('real', 'blob'):
+        elif tag == 'real' and type(value) is float:
+            if not math.isfinite(value):
+                raise _Problem('UNSUPPORTED_CELL_ENCODING')
+            kind, data = b'R', struct.pack('>d', value)
+        elif tag == 'blob':
             raise _Problem('UNSUPPORTED_CELL_ENCODING')
         else:
             raise _Problem('INVALID_TYPED_CELL')
@@ -111,6 +118,17 @@ def _parent_row(row: Any, expected: int) -> bytes:
             if type(value) is not str or _INT.fullmatch(value) is None or len(value) > 20:
                 raise _Problem('INVALID_TYPED_CELL')
             value = int(value)
+        elif tag == 'real':
+            # A bounded hexadecimal float is required; fromhex alone also
+            # accepts infinities, NaNs and strings without a binary exponent.
+            if type(value) is not str or len(value) > 128 or _REAL_HEX.fullmatch(value) is None:
+                raise _Problem('INVALID_TYPED_CELL')
+            try:
+                value = float.fromhex(value)
+            except (ValueError, OverflowError):
+                raise _Problem('INVALID_TYPED_CELL') from None
+            if not math.isfinite(value):
+                raise _Problem('UNSUPPORTED_CELL_ENCODING')
         values.append((tag, value))
     return _hash_row(values)
 
@@ -134,7 +152,9 @@ def _local_row(row: tuple[Any, ...]) -> bytes:
             values.append(('integer', value))
         elif type(value) is str:
             values.append(('text', value))
-        elif type(value) in (bytes, float):
+        elif type(value) is float:
+            values.append(('real', value))
+        elif type(value) is bytes:
             raise _Problem('UNSUPPORTED_CELL_ENCODING')
         else:
             raise _Problem('INVALID_LOCAL_CELL')

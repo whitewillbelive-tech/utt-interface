@@ -3,6 +3,7 @@ import hashlib
 import http.client
 import json
 import sqlite3
+import tempfile
 import threading
 import unittest
 from pathlib import Path
@@ -134,6 +135,120 @@ class WorkspaceReaderTests(unittest.TestCase):
                     self.assertEqual(r.read(q)['error']['code'], 'UNSUPPORTED_CONTRACT')
                 finally:
                     r.close()
+
+    def test_opt_in_lifecycle_preserves_archive_and_merge_state_on_same_snapshot(self):
+        raw = image([
+            ('fictional-active', '제목', '본문', None, 'NOTE', 'UNREVIEWED', None, None),
+            ('fictional-archived', '보관', '보관 본문', None, 'NOTE', 'UNREVIEWED', 'fictional-time', None),
+            ('fictional-merged', '합병', '합병 본문', None, 'NOTE', 'UNREVIEWED', None, 'fictional-active'),
+        ])
+        reader = WorkspaceSnapshotProvider(raw, lifecycle_enabled=True)
+        try:
+            snapshot = reader.read(request('capabilities'))['snapshot']
+            scope = {key: snapshot[key] for key in ('dataset_id', 'snapshot_id')}
+            page = reader.read(request('search', **scope, page_size=3))
+            self.assertEqual(page['status'], 'OK')
+            ids = [row['record_id'] for row in page['result']['records']]
+            self.assertEqual(ids, ['fictional-active', 'fictional-archived', 'fictional-merged'])
+            for ident in ids:
+                self.assertEqual(reader.read(request('detail', **scope, record_id=ident))['status'], 'OK')
+            lifecycle = reader.lifecycle(**scope, record_ids=ids)
+            self.assertEqual(lifecycle['contract_version'], 'UTT-WORKSPACE-LIFECYCLE/0.1')
+            self.assertEqual(lifecycle['snapshot'], snapshot)
+            self.assertEqual(lifecycle['records'], [
+                {'record_id': 'fictional-active', 'archived_at': None, 'merged_into': None},
+                {'record_id': 'fictional-archived', 'archived_at': 'fictional-time', 'merged_into': None},
+                {'record_id': 'fictional-merged', 'archived_at': None, 'merged_into': 'fictional-active'},
+            ])
+            for ids, scope_override, code in [
+                (['fictional-active'], {'snapshot_id': 'different'}, 'VERSION_MISMATCH'),
+                (['missing'], {}, 'ITEM_NOT_FOUND'),
+                (['fictional-active', 'fictional-active'], {}, 'INVALID_REQUEST'),
+                ([''] , {}, 'INVALID_REQUEST'),
+                (['fictional-active'] * 101, {}, 'INVALID_REQUEST'),
+            ]:
+                with self.subTest(code=code):
+                    with self.assertRaises(WorkspaceSnapshotError) as exc:
+                        reader.lifecycle(**{**scope, **scope_override}, record_ids=ids)
+                    self.assertEqual(exc.exception.code, code)
+        finally:
+            reader.close()
+
+    def test_lifecycle_is_never_implicitly_enabled(self):
+        with self.assertRaises(WorkspaceSnapshotError) as exc:
+            self.reader.lifecycle(**self.scope, record_ids=['fictional-001'])
+        self.assertEqual(exc.exception.code, 'UNSUPPORTED_CONTRACT')
+        with self.assertRaises(WorkspaceSnapshotError):
+            WorkspaceSnapshotProvider(self.raw, lifecycle_enabled='yes')
+
+    def test_extended_detail_uses_the_same_snapshot_and_preserves_record_state(self):
+        from app.publisher_workspace import snapshot_workspace
+        from tests.test_publisher_workspace import make_fixture
+
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'fictional.sqlite'
+            writer = make_fixture(path)
+            try:
+                writer.execute("UPDATE work_records SET archived_at='fictional-time'")
+                writer.executemany('INSERT INTO work_projects(project_id,name,state) VALUES (?,?,?)',
+                                   [('fictional-p1', '가상 프로젝트', 'OPEN'),
+                                    ('fictional-p2', '가상 프로젝트 2', None)])
+                writer.execute("INSERT INTO work_topics(topic_id,name) VALUES ('fictional-topic','가상 주제')")
+                writer.execute("INSERT INTO work_record_projects(link_id,record_id,project_id,role,basis,archived_at) "
+                               "VALUES ('fictional-link','fictional-record','fictional-p1','MEMBER','CANDIDATE','fictional-date')")
+                writer.execute("INSERT INTO work_record_topics(record_id,topic_id,status) "
+                               "VALUES ('fictional-record','fictional-topic','INHERITED')")
+                writer.commit()
+                with snapshot_workspace(path, directory=temp) as snapshot:
+                    reader = WorkspaceSnapshotProvider(snapshot.path.read_bytes(), lifecycle_enabled=True)
+                try:
+                    self.assertTrue(reader.workspace_features()['read_detail'])
+                    scope = reader.read(request('capabilities'))['snapshot']
+                    q = {'contract_version': 'UTT-WORKSPACE-READ/0.1', 'operation': 'detail',
+                         'dataset_id': scope['dataset_id'], 'snapshot_id': scope['snapshot_id'],
+                         'record_id': 'fictional-record'}
+                    actual = reader.read_workspace_detail(q)
+                    self.assertEqual(actual['status'], 'OK')
+                    self.assertEqual(actual['contract_version'], 'UTT-WORKSPACE-DETAIL/0.1')
+                    self.assertEqual(actual['record']['archived_at'], 'fictional-time')
+                    self.assertIsNone(actual['record']['merged_into'])
+                    self.assertEqual(actual['snapshot_id'], scope['snapshot_id'])
+                    self.assertEqual(len(actual['revisions']), 1)
+                    self.assertEqual(len(actual['events']), 1)
+                    stale = reader.read_workspace_detail({**q, 'snapshot_id': 'fictional-stale'})
+                    self.assertEqual(stale['error']['code'], 'VERSION_MISMATCH')
+                    self.assertEqual(reader.read_workspace_detail({**q, 'other': 1})['error']['code'],
+                                     'INVALID_REQUEST')
+                    self.assertEqual(reader.read_workspace_detail({**q, 'record_id': 'fictional-missing'})
+                                     ['error']['code'], 'ITEM_NOT_FOUND')
+                    catalog = {'contract_version': 'UTT-WORKSPACE-READ/0.1', 'operation': 'projects',
+                               'dataset_id': scope['dataset_id'], 'snapshot_id': scope['snapshot_id'],
+                               'limit': 1, 'offset': 0}
+                    first = reader.workspace_catalog(catalog)
+                    self.assertEqual(first['status'], 'OK')
+                    self.assertEqual(first['items'][0]['project_id'], 'fictional-p1')
+                    self.assertEqual(first['next_offset'], 1)
+                    second = reader.workspace_catalog({**catalog, 'offset': first['next_offset']})
+                    self.assertEqual(second['items'][0]['project_id'], 'fictional-p2')
+                    self.assertIsNone(second['next_offset'])
+                    topics = reader.workspace_catalog({**catalog, 'operation': 'topics', 'limit': 10})
+                    self.assertEqual(topics['items'][0]['topic_id'], 'fictional-topic')
+                    members = reader.workspace_catalog({**catalog, 'operation': 'project_members',
+                                                        'identifier': 'fictional-p1'})
+                    self.assertEqual(members['items'][0]['link']['basis'], 'CANDIDATE')
+                    self.assertEqual(members['items'][0]['link']['archived_at'], 'fictional-date')
+                    self.assertEqual(members['items'][0]['record']['archived_at'], 'fictional-time')
+                    members = reader.workspace_catalog({**catalog, 'operation': 'topic_members',
+                                                        'identifier': 'fictional-topic'})
+                    self.assertEqual(members['items'][0]['link']['status'], 'INHERITED')
+                    self.assertEqual(members['items'][0]['record']['archived_at'], 'fictional-time')
+                    self.assertEqual(reader.workspace_catalog({**catalog, 'snapshot_id': 'wrong'})
+                                     ['error']['code'], 'VERSION_MISMATCH')
+                finally:
+                    reader.close()
+                self.assertFalse(reader.workspace_features()['read_detail'])
+            finally:
+                writer.close()
 
     def test_standalone_capture_never_falls_back_to_wal_or_files(self):
         with patch('builtins.open', side_effect=AssertionError('filesystem forbidden')):
