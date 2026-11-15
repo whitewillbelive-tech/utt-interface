@@ -125,6 +125,55 @@ class PublisherTests(unittest.TestCase):
             self.wait_done()
             self.assertEqual(auth.call_count, 2)
 
+    def test_native_parent_error_code_is_not_masked(self):
+        self.runtime.result = {'contract_version': 'UTT-WORKSPACE-PUBLICATION/0.1',
+                               'status': 'ERROR', 'error': {'code': 'PARENT_TABLE_SCHEMA_MISMATCH'},
+                               'dropbox_status': 'UNKNOWN'}
+        with patch('app.workspace_publisher.run_publisher_flow', return_value=self.session):
+            with patch('app.workspace_publisher.PublisherTransport', return_value=object()):
+                self.publisher.start(*self.runtime.scope)
+                self.assertTrue(self.runtime.entered.wait(3))
+                self.runtime.release.set()
+                result = self.wait_done()
+                self.assertEqual((result['status'], result['error']['code']),
+                                 ('ERROR', 'PARENT_TABLE_SCHEMA_MISMATCH'))
+
+    def test_read_error_code_is_not_masked(self):
+        self.runtime.result = {'contract_version': 'UTT-WORKSPACE-PUBLICATION/0.1',
+                               'status': 'ERROR', 'error': {'code': 'READ_FAILED'},
+                               'dropbox_status': 'UNKNOWN'}
+        with patch('app.workspace_publisher.run_publisher_flow', return_value=self.session):
+            with patch('app.workspace_publisher.PublisherTransport', return_value=object()):
+                self.publisher.start(*self.runtime.scope)
+                self.assertTrue(self.runtime.entered.wait(3))
+                self.runtime.release.set()
+                self.assertEqual(self.wait_done()['error']['code'], 'READ_FAILED')
+
+    def test_arbitrary_message_is_redacted(self):
+        self.runtime.result = {'contract_version': 'UTT-WORKSPACE-PUBLICATION/0.1',
+                               'status': 'ERROR',
+                               'error': {'code': 'private-token-and-record-path'},
+                               'dropbox_status': 'UNKNOWN'}
+        with patch('app.workspace_publisher.run_publisher_flow', return_value=self.session):
+            with patch('app.workspace_publisher.PublisherTransport', return_value=object()):
+                self.publisher.start(*self.runtime.scope)
+                self.assertTrue(self.runtime.entered.wait(3))
+                self.runtime.release.set()
+                self.assertEqual(self.wait_done()['error']['code'], 'PUBLISH_FAILED')
+
+    def test_uncertain_upload_does_not_offer_another_attempt(self):
+        self.runtime.result = {'contract_version': 'UTT-WORKSPACE-PUBLICATION/0.1',
+                               'status': 'ERROR', 'error': {'code': 'WRITE_UNCERTAIN'},
+                               'dropbox_status': 'UNKNOWN'}
+        with patch('app.workspace_publisher.run_publisher_flow', return_value=self.session) as auth:
+            with patch('app.workspace_publisher.PublisherTransport', return_value=object()):
+                self.publisher.start(*self.runtime.scope)
+                self.assertTrue(self.runtime.entered.wait(3))
+                self.runtime.release.set()
+                self.assertEqual(self.wait_done()['status'], 'UNKNOWN')
+                self.assertEqual(self.publisher.start(*self.runtime.scope)['status'], 'UNKNOWN')
+                self.assertEqual(auth.call_count, 1)
+
     def test_auth_or_runtime_exceptions_are_redacted(self):
         output = io.StringIO()
         with redirect_stdout(output), redirect_stderr(output), \
