@@ -14,6 +14,8 @@ import json
 import re
 from typing import Callable, Iterable
 
+from app.publisher_transport import PublisherTransportError
+
 ACTIVE = '/system/active-baseline.json'
 _HASH = re.compile(r'[0-9a-f]{64}\Z')
 _RELATIVE = re.compile(r'[A-Za-z0-9_./-]+\Z')
@@ -145,11 +147,24 @@ def parse_manifest(raw: bytes) -> Manifest:
     return Manifest(data['baseline_id'], hashlib.sha256(raw).hexdigest(), len(raw), tuple(entries), workspace)
 
 
+_FETCH_PHASES = {
+    'ACTIVE_MISSING': 'ACTIVE',
+    'MANIFEST_MISSING': 'MANIFEST',
+    'COMMIT_MISSING': 'COMMIT',
+    'ACTIVE_CHANGED': 'ACTIVE_RECHECK',
+}
+
+
 def _fetch(fetch: Callable[[str], tuple[bytes, str] | None], path: str, code: str):
+    phase = _FETCH_PHASES[code]
     try:
         reply = fetch(path)
+    except PublisherTransportError as exc:
+        # Preserve only the fixed, non-sensitive transport category and the
+        # known protocol step; never include remote body/path/exception text.
+        raise ReaderError(phase + '_' + exc.code) from None
     except Exception:
-        raise ReaderError('READ_FAILED') from None
+        raise ReaderError(phase + '_READ_FAILED') from None
     if (type(reply) is not tuple or len(reply) != 2 or type(reply[0]) is not bytes
             or type(reply[1]) is not str or not reply[1] or len(reply[1]) > 1024
             or any(not 33 <= ord(c) <= 126 for c in reply[1])):
