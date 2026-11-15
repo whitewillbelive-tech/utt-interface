@@ -136,6 +136,33 @@ class PublisherTransportTests(unittest.TestCase):
         self.assertEqual(result.size, len(COMMIT))
         self.assertEqual(json.loads(fake.calls[0][4].get('Dropbox-API-Arg', '{}')), {})
 
+    def test_valid_oauth_token_length_is_independent_of_revision_limit(self):
+        # Auth exchange accepts printable ASCII tokens up to 8192 bytes.
+        # Before this fix, the transport used the <=1024-character REV regex.
+        body = b'fictional-active-content'
+        md = metadata(p.ACTIVE, len(body))
+        for length in (1024, 1025, 2048, 8192):
+            with self.subTest(length=length):
+                sink = io.BytesIO()
+                fake = Connections([Response(
+                    200, body, {'Dropbox-API-Result': json.dumps(md)})])
+                with patch.object(p.http.client, 'HTTPSConnection', side_effect=fake.make):
+                    result = p._dispatch('T' * length, p._Operation(
+                        'download', p.ACTIVE, stream=sink, size=len(body)))
+                self.assertEqual(result.size, len(body))
+                self.assertEqual(sink.getvalue(), body)
+                self.assertEqual(len(fake.calls), 1)
+
+    def test_invalid_oauth_token_never_starts_a_request(self):
+        for bad in ('', 'T' * 8193, 'bad\\nvalue', 'bad\\x00value'):
+            with self.subTest(length=len(bad)):
+                with patch.object(p.http.client, 'HTTPSConnection',
+                                  side_effect=AssertionError('network attempted')):
+                    with self.assertRaises(p.PublisherTransportError) as err:
+                        p._dispatch(bad, p._Operation(
+                            'download', p.ACTIVE, stream=io.BytesIO(), size=256))
+                self.assertEqual(err.exception.code, 'REQUEST_INVALID')
+
     def test_download_revision_is_from_same_response_as_bytes(self):
         body = b'fictional-active-content'
         md = metadata(p.ACTIVE, len(body), rev='same-response-rev')
