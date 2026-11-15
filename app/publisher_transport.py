@@ -23,6 +23,9 @@ from app.dropbox_content_hash import DropboxContentHasher
 ACTIVE = '/system/active-baseline.json'
 _GEN = re.compile(r'/snapshots/baselines/[0-9a-f]{64}/[A-Za-z0-9._/-]+\Z')
 _REV = re.compile(r'[\x21-\x7e]{1,1024}\Z')
+# A valid Dropbox OAuth token may be longer than a file revision; match the
+# 8192-character upper bound and printable-ASCII rule enforced by exchange().
+_TOKEN = re.compile(r'[\x21-\x7e]{1,8192}\Z')
 _CHUNK = 8 * 1024 * 1024
 _MAX_JSON = 1024 * 1024
 _MAX_CONTROL = 16 * 1024 * 1024
@@ -262,7 +265,7 @@ def _request(token: str, host: str, route: str, argument: dict, payload: bytes,
         ('content.dropboxapi.com', '/2/files/upload_session/append_v2'),
         ('content.dropboxapi.com', '/2/files/upload_session/finish'),
     }
-    if (host, route) not in allowed or type(token) is not str or not _REV.fullmatch(token):
+    if (host, route) not in allowed or type(token) is not str or not _TOKEN.fullmatch(token):
         raise PublisherTransportError('REQUEST_INVALID')
     conn = None
     write = route in ('/2/files/upload', '/2/files/upload_session/start',
