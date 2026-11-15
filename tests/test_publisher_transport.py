@@ -154,7 +154,7 @@ class PublisherTransportTests(unittest.TestCase):
                 self.assertEqual(len(fake.calls), 1)
 
     def test_invalid_oauth_token_never_starts_a_request(self):
-        for bad in ('', 'T' * 8193, 'bad\\nvalue', 'bad\\x00value'):
+        for bad in ('', 'T' * 8193, 'bad\nvalue', 'bad\x00value'):
             with self.subTest(length=len(bad)):
                 with patch.object(p.http.client, 'HTTPSConnection',
                                   side_effect=AssertionError('network attempted')):
