@@ -79,6 +79,13 @@ class PublisherReaderTests(unittest.TestCase):
                 self.assert_code(expected, lambda: resolve_active(fetch))
                 self.assertIn(failing_path, seen)
 
+    def test_oauth_error_keeps_fixed_failure_stage(self):
+        from app.dropbox_auth import OAuthError
+        def fetch(_path):
+            raise OAuthError('APP_FOLDER_UNCONFIRMED')
+        self.assert_code('ACTIVE_APP_FOLDER_UNCONFIRMED',
+                         lambda: resolve_active(fetch))
+
     def test_active_recheck_failure_has_distinct_fixed_code(self):
         calls = 0
         def fetch(path):
