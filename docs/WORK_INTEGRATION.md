@@ -478,3 +478,9 @@ Windows에서 Dropbox 접속 없이 로컬 workspace의 전수 목록·상세와
 ```
 
 이는 기존 발행기와 같은 데이터·부모·manifest·COMMIT·row 비교 및 candidate 구성 검사를 수행하되 **쓰기 허가 계획 생성 이전에 종료한다.** `PRECHECK`를 입력해야 시작하며 `START`와 혼동하지 않는다. Dropbox 인증은 기존 publisher의 3개 scope를 요구하지만 이 실행 모드에서 실제 파일 업로드·COMMIT 생성·활성 참조 교체는 수행하지 않는다. 결과는 `Preflight status: PREFLIGHT_OK` 또는 고정 오류 코드로만 출력된다. `PREFLIGHT_OK`는 발행 성공을 뜻하지 않으며 업로드 이후 구간 오류까지 진단하지 않는다. 발행이 불확실한 경우 현재 운영 참조 및 staged 상태를 먼저 확인하고 오염된 원격 세대를 지우거나 자동 재시도하지 않는다.
+
+### PR #16 관리 보완 — 단계별 원격 읽기 실패 판별
+
+운영 발행이 `READ_FAILED`로 보인 구버전은 활성 참조, manifest, COMMIT을 읽는 `publisher_reader._fetch` 단계에서 원래 전송 오류를 없앴다. 최신 코드에서는 `--preflight` 결과를 `ACTIVE_REQUEST_FAILED`, `MANIFEST_NETWORK_FAILED`, `COMMIT_RESPONSE_INVALID`, `ACTIVE_RECHECK_READ_FAILED` 등의 **고정·비민감 코드**로 구분한다. DNS/TLS/시간초과/기타 OS 네트워크 오류도 구분하지만 에러 문장·요청 URL·사용자 데이터는 출력하지 않는다. 이 단계들은 Dropbox 쓰기를 수행하지 않는다.
+
+기존 작업실 발행 결과가 `PUBLISH_FAILED`였더라도 원래 세부 원인을 역산할 수 없고, 새 진단에 다시 나타난 구체적인 단계·원인 코드가 근거가 된다. `Preflight status: ...`만 확인하고 발행 버튼은 반복 실행하지 않는다.
