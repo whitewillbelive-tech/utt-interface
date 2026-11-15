@@ -374,6 +374,16 @@ def _query_only_snapshot(conn: sqlite3.Connection) -> None:
     c.row_factory = None
     if c.execute('PRAGMA query_only').fetchone() != (1,):
         raise _Problem('SNAPSHOT_REQUIRED')
+    try:
+        if c.execute('PRAGMA integrity_check').fetchall() != [('ok',)]:
+            raise _Problem('SQLITE_INTEGRITY_CONFLICT')
+    except sqlite3.Error:
+        raise _Problem('SQLITE_INTEGRITY_CONFLICT') from None
+    try:
+        if c.execute('PRAGMA foreign_key_check').fetchone() is not None:
+            raise _Problem('FOREIGN_KEY_CONFLICT')
+    except sqlite3.Error:
+        raise _Problem('FOREIGN_KEY_CONFLICT') from None
 
 
 def _workspace_tables(conn: sqlite3.Connection) -> dict[str, str | None]:
@@ -547,6 +557,226 @@ def _assert_meta_preserved(parent: sqlite3.Connection, candidate: sqlite3.Connec
     return old != new
 
 
+_EVENT_COLUMNS = ('sequence', 'event_id', 'event_kind', 'record_id', 'record_version', 'actor',
+                  'authorization_basis', 'reason', 'detail_json', 'occurred_at',
+                  'preceding_hash', 'event_hash')
+_PROJECT_COLUMNS = ('link_id', 'record_id', 'project_id', 'role', 'scope', 'basis',
+                    'original_evidence_id', 'added_at', 'archived_at')
+_VERSIONED_EVENT_KINDS = frozenset({'CREATE', 'EDIT', 'ARCHIVE', 'RESTORE', 'MERGE',
+                                    'UNMERGE', 'RESTORE_REVISION', 'DECISION'})
+
+
+def _event_history(conn: sqlite3.Connection) -> list[tuple[Any, ...]]:
+    """Verify the observed original chain; result stays in the user runtime."""
+    from app.workspace_write import OriginalWorkspaceEventCodec
+    c = conn.cursor(); c.row_factory = None
+    cols = {r[1] for r in c.execute('PRAGMA main.table_info(work_events)')}
+    if not set(_EVENT_COLUMNS) <= cols:
+        raise _Problem('EVENT_SCHEMA_UNSUPPORTED')
+    fields = ','.join(_quoted(name) for name in _EVENT_COLUMNS)
+    rows = c.execute('SELECT ' + fields + ' FROM main.work_events ORDER BY sequence').fetchmany(_MAX_ROWS + 1)
+    if len(rows) > _MAX_ROWS:
+        raise _Problem('LIMIT_EXCEEDED')
+    if any(type(row[0]) is not int or row[0] < 1 for row in rows):
+        raise _Problem('EVENT_ORDER_CONFLICT')
+    if not OriginalWorkspaceEventCodec().verify_history(tuple(rows)):
+        raise _Problem('EVENT_CHAIN_CONFLICT')
+    return rows
+
+
+def _appended_events(parent: sqlite3.Connection, candidate: sqlite3.Connection) -> list[dict[str, Any]]:
+    old, new = _event_history(parent), _event_history(candidate)
+    if len(new) < len(old):
+        raise _Problem('EVENT_HISTORY_CONFLICT')
+    if any(not hmac.compare_digest(_sqlite_row(a), _sqlite_row(b)) for a, b in zip(old, new)):
+        raise _Problem('EVENT_HISTORY_CONFLICT')
+    p = parent.execute("SELECT value FROM work_meta WHERE key='data_revision'").fetchone()
+    n = candidate.execute("SELECT value FROM work_meta WHERE key='data_revision'").fetchone()
+    if (not p or not n or type(p[0]) is not str or type(n[0]) is not str
+            or re.fullmatch(r'(?:0|[1-9][0-9]*)', p[0]) is None
+            or re.fullmatch(r'(?:0|[1-9][0-9]*)', n[0]) is None
+            or len(p[0]) > 20 or len(n[0]) > 20):
+        raise _Problem('DATA_REVISION_CONFLICT')
+    # Original bump() increments once per appended event; an unchanged parent
+    # retains its exact bytes. Do not accept a reset, rollback, or silent edit.
+    if (not new[len(old):] and p[0] != n[0]) or (new[len(old):] and n[0] != str(int(p[0]) + len(new) - len(old))):
+        raise _Problem('DATA_REVISION_CONFLICT')
+    return [dict(zip(_EVENT_COLUMNS, row)) for row in new[len(old):]]
+
+
+def _assert_revision_events(parent: sqlite3.Connection, candidate: sqlite3.Connection,
+                            events: list[dict[str, Any]]) -> None:
+    """Bind every new record revision to its new event without inventing history."""
+    old_versions = dict(parent.execute('SELECT record_id,version FROM work_records'))
+    current_versions = dict(candidate.execute('SELECT record_id,version FROM work_records'))
+    event_by_id = {event['event_id']: event for event in events}
+    if len(event_by_id) != len(events):
+        raise _Problem('EVENT_HISTORY_CONFLICT')
+    columns = {row[1] for row in candidate.execute('PRAGMA main.table_info(work_revisions)')}
+    if 'event_id' not in columns:
+        raise _Problem('REVISION_EVENT_UNSUPPORTED')
+    for record_id, version in candidate.execute('SELECT record_id,version FROM work_revisions'):
+        current = current_versions.get(record_id)
+        if type(version) is not int or version < 1 or type(current) is not int or version > current:
+            raise _Problem('WORK_REVISION_CONFLICT')
+    for record_id, current in current_versions.items():
+        previous = old_versions.get(record_id, 0)
+        if type(current) is not int or type(previous) is not int or current < previous:
+            raise _Problem('WORK_VERSION_CONFLICT')
+        if current - previous > _MAX_ROWS:
+            raise _Problem('LIMIT_EXCEEDED')
+        rows = candidate.execute('SELECT version,event_id FROM work_revisions WHERE record_id=? '
+                                 'AND version>? AND version<=? ORDER BY version',
+                                 (record_id, previous, current)).fetchall()
+        if len(rows) != current - previous:
+            raise _Problem('WORK_REVISION_GAP')
+        for expected, (version, event_id) in enumerate(rows, previous + 1):
+            event = event_by_id.get(event_id)
+            if (version != expected or event is None or event['record_id'] != record_id
+                    or event['record_version'] != version or event['event_kind'] not in _VERSIONED_EVENT_KINDS
+                    or (event['event_kind'] == 'CREATE') != (version == 1 and previous == 0)):
+                raise _Problem('REVISION_EVENT_CONFLICT')
+
+
+def _project_rows(conn: sqlite3.Connection) -> dict[str, tuple[int, dict[str, Any]]]:
+    c = conn.cursor(); c.row_factory = None
+    columns = {row[1] for row in c.execute('PRAGMA main.table_info(work_record_projects)')}
+    if not set(_PROJECT_COLUMNS) <= columns:
+        raise _Problem('PROJECT_LINK_SCHEMA_UNSUPPORTED')
+    query = 'SELECT rowid,' + ','.join(_quoted(name) for name in _PROJECT_COLUMNS) + ' FROM main.work_record_projects'
+    result = {}
+    for i, row in enumerate(c.execute(query), 1):
+        if i > _MAX_ROWS:
+            raise _Problem('LIMIT_EXCEEDED')
+        item = dict(zip(_PROJECT_COLUMNS, row[1:]))
+        if type(item['link_id']) is not str or not item['link_id'] or item['link_id'] in result:
+            raise _Problem('PROJECT_LINK_CONFLICT')
+        result[item['link_id']] = (row[0], item)
+    return result
+
+
+def _assert_project_links(parent: sqlite3.Connection, candidate: sqlite3.Connection,
+                          events: list[dict[str, Any]]) -> bool:
+    """Check source PROJECT_LINK and explicit archive/restore extension events."""
+    old, new = _project_rows(parent), _project_rows(candidate)
+    if not old.keys() <= new.keys():
+        raise _Problem('PROJECT_LINK_CONFLICT')
+    for link_id in old:
+        if old[link_id][0] != new[link_id][0]:
+            raise _Problem('PROJECT_LINK_CONFLICT')
+    relevant: dict[str, list[tuple[dict[str, Any], dict[str, Any]]]] = {}
+    for event in events:
+        if event['event_kind'] not in ('PROJECT_LINK', 'PROJECT_ARCHIVE', 'PROJECT_RESTORE'):
+            continue
+        try:
+            detail = json.loads(event['detail_json'])
+        except (TypeError, ValueError, RecursionError):
+            raise _Problem('PROJECT_LINK_EVENT_CONFLICT') from None
+        if type(detail) is not dict or type(detail.get('link_id')) is not str:
+            raise _Problem('PROJECT_LINK_EVENT_CONFLICT')
+        relevant.setdefault(detail['link_id'], []).append((event, detail))
+    if not relevant.keys() <= new.keys():
+        raise _Problem('PROJECT_LINK_EVENT_CONFLICT')
+    for link_id, (_rowid, target) in new.items():
+        previous = old.get(link_id)
+        current = None if previous is None else previous[1]
+        for event, detail in relevant.get(link_id, []):
+            if event['record_id'] != target['record_id'] or event['record_version'] is not None:
+                raise _Problem('PROJECT_LINK_EVENT_CONFLICT')
+            if event['event_kind'] == 'PROJECT_LINK':
+                if (current is not None or set(detail) != {'link_id', 'project_id', 'basis'}
+                        or detail['project_id'] != target['project_id'] or detail['basis'] != target['basis']
+                        or target['basis'] != ('USER_CONFIRMED' if event['actor'] == 'USER' else 'CANDIDATE')):
+                    raise _Problem('PROJECT_LINK_EVENT_CONFLICT')
+                current = {**target, 'archived_at': None}
+                continue
+            before, after = detail.get('before'), detail.get('after')
+            if (set(detail) != {'link_id', 'before', 'after'} or type(before) is not dict or type(after) is not dict
+                    or set(before) != set(_PROJECT_COLUMNS) or set(after) != set(_PROJECT_COLUMNS)
+                    or current != before or any(before[k] != after[k] for k in _PROJECT_COLUMNS if k != 'archived_at')):
+                raise _Problem('PROJECT_LINK_EVENT_CONFLICT')
+            if event['event_kind'] == 'PROJECT_ARCHIVE':
+                if before['archived_at'] is not None or type(after['archived_at']) is not str or not after['archived_at']:
+                    raise _Problem('PROJECT_LINK_EVENT_CONFLICT')
+            elif before['archived_at'] is None or after['archived_at'] is not None:
+                raise _Problem('PROJECT_LINK_EVENT_CONFLICT')
+            current = after
+        if current != target:
+            raise _Problem('PROJECT_LINK_EVENT_CONFLICT')
+    return old != new
+
+
+def _relation_rows(conn: sqlite3.Connection, table: str, columns: tuple[str, ...],
+                   key: tuple[str, str]) -> dict[tuple[str, str], dict[str, Any]]:
+    cursor = conn.cursor(); cursor.row_factory = None
+    actual = {row[1] for row in cursor.execute('PRAGMA main.table_info(' + _quoted(table) + ')')}
+    if not set(columns) <= actual:
+        raise _Problem('RELATION_SCHEMA_UNSUPPORTED')
+    result = {}
+    sql = 'SELECT ' + ','.join(_quoted(c) for c in columns) + ' FROM main.' + _quoted(table)
+    for count, values in enumerate(cursor.execute(sql), 1):
+        if count > _MAX_ROWS:
+            raise _Problem('LIMIT_EXCEEDED')
+        row = dict(zip(columns, values))
+        ident = (row[key[0]], row[key[1]])
+        if any(type(item) is not str or not item for item in ident) or ident in result:
+            raise _Problem('RELATION_CONFLICT')
+        result[ident] = row
+    return result
+
+
+def _assert_topic_tag_links(parent: sqlite3.Connection, candidate: sqlite3.Connection,
+                            events: list[dict[str, Any]], *, kind: str) -> bool:
+    if kind == 'tag':
+        table, foreign, columns = 'work_record_tags', 'tag_id', ('record_id', 'tag_id')
+        event_names = ('TAG', 'TAG_REMOVE')
+    elif kind == 'topic':
+        table, foreign, columns = 'work_record_topics', 'topic_id', ('record_id', 'topic_id', 'status')
+        event_names = ('TOPIC_LINK', 'TOPIC_UNLINK')
+    else:
+        raise _Problem('RELATION_SCHEMA_UNSUPPORTED')
+    old = _relation_rows(parent, table, columns, ('record_id', foreign))
+    new = _relation_rows(candidate, table, columns, ('record_id', foreign))
+    changes: dict[tuple[str, str], list[tuple[dict[str, Any], dict[str, Any]]]] = {}
+    for event in events:
+        if event['event_kind'] not in event_names:
+            continue
+        try:
+            detail = json.loads(event['detail_json'])
+        except (TypeError, ValueError, RecursionError):
+            raise _Problem('RELATION_EVENT_CONFLICT') from None
+        if (type(detail) is not dict or type(detail.get(foreign)) is not str or not detail[foreign]
+                or type(event['record_id']) is not str or not event['record_id']
+                or event['record_version'] is not None):
+            raise _Problem('RELATION_EVENT_CONFLICT')
+        changes.setdefault((event['record_id'], detail[foreign]), []).append((event, detail))
+    for ident in old.keys() | new.keys() | changes.keys():
+        current = old.get(ident)
+        for event, detail in changes.get(ident, []):
+            if event['event_kind'] == 'TAG':
+                if current is not None or set(detail) != {'tag_id'}:
+                    raise _Problem('RELATION_EVENT_CONFLICT')
+                current = {'record_id': ident[0], 'tag_id': ident[1]}
+                continue
+            if set(detail) != {foreign, 'before', 'after'} or detail['before'] != current:
+                raise _Problem('RELATION_EVENT_CONFLICT')
+            if event['event_kind'] in ('TAG_REMOVE', 'TOPIC_UNLINK'):
+                if current is None or detail['after'] is not None:
+                    raise _Problem('RELATION_EVENT_CONFLICT')
+                current = None
+            else:
+                after = detail['after']
+                if (current is not None or type(after) is not dict or set(after) != set(columns)
+                        or after['record_id'] != ident[0] or after[foreign] != ident[1]
+                        or after['status'] not in ('CANDIDATE', 'USER_CONFIRMED')
+                        or after['status'] == 'USER_CONFIRMED' and event['actor'] != 'USER'):
+                    raise _Problem('RELATION_EVENT_CONFLICT')
+                current = after
+        if current != new.get(ident):
+            raise _Problem('RELATION_EVENT_CONFLICT')
+    return old != new
+
+
 def _assert_work_keys(conn: sqlite3.Connection) -> None:
     expected = {'work_records': ['record_id'], 'work_revisions': ['record_id', 'version'],
                 'work_meta': ['key']}
@@ -586,10 +816,11 @@ def compare_workspace_snapshots(parent: sqlite3.Connection, candidate: sqlite3.C
     and historical item_fts independently compared. Parent generation payloads
     must ALSO be preserved byte-identically by the caller.
 
-    Even a pass is structural and does not authenticate source provenance,
-    validate event hash semantics, authorize conclusions or settle whether new
-    user additions should be merged. Callers must separately handle conflicts,
-    actual immutable capture, authorization and reader compatibility.
+    The original event hash and append-only chain are checked, along with new
+    revision/event bindings and link changes. The original hash omits
+    authorization_basis and does not authenticate an actor or approval.
+    Callers must separately handle provenance, actual immutable capture,
+    authorization and reader compatibility.
     """
     try:
         _query_only_snapshot(parent)
@@ -631,10 +862,19 @@ def compare_workspace_snapshots(parent: sqlite3.Connection, candidate: sqlite3.C
                 if parent_kind.get(('main', name)) != 'shadow' or candidate_kind.get(('main', name)) != 'shadow':
                     raise _Problem('FTS_SHADOW_UNSUPPORTED')
         budget = [0]
+        events = _appended_events(parent, candidate)
         changed = _assert_meta_preserved(parent, candidate)
         changed = (previous.keys() != current.keys() or old_objects.keys() != new_objects.keys()) or changed
         changed = _assert_work_records(parent, candidate, budget) or changed
+        _assert_revision_events(parent, candidate, events)
         ignored = {'work_meta', 'work_records'} | parent_shadows
+        if 'work_record_projects' in previous:
+            changed = _assert_project_links(parent, candidate, events) or changed
+            ignored.add('work_record_projects')
+        for kind, table in (('tag', 'work_record_tags'), ('topic', 'work_record_topics')):
+            if table in previous:
+                changed = _assert_topic_tag_links(parent, candidate, events, kind=kind) or changed
+                ignored.add(table)
         if present_work_fts:
             ignored |= {'work_fts'} | work_fts_shadows
         for name in previous:

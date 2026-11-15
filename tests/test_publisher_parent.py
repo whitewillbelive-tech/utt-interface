@@ -8,7 +8,9 @@ import io
 import json
 import math
 import sqlite3
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from app.publisher_parent import _Problem, _local_row, _parent_row, compare_parent_tables
@@ -298,19 +300,32 @@ class WorkspaceHistoryTests(unittest.TestCase):
                 version INTEGER, created_at TEXT, updated_at TEXT, archived_at TEXT, merged_into TEXT);
             CREATE TABLE work_revisions (record_id TEXT, version INTEGER, title TEXT, body TEXT,
                 body_sha256 TEXT, summary TEXT, review_status TEXT, adoption_status TEXT,
-                decision_status TEXT, archived_at TEXT, merged_into TEXT, PRIMARY KEY(record_id,version));
-            CREATE TABLE work_events (id INTEGER PRIMARY KEY, payload TEXT);
+                decision_status TEXT, archived_at TEXT, merged_into TEXT, event_id TEXT, PRIMARY KEY(record_id,version));
+            CREATE TABLE work_events (sequence INTEGER PRIMARY KEY, event_id TEXT UNIQUE, event_kind TEXT,
+                record_id TEXT, record_version INTEGER, actor TEXT, authorization_basis TEXT, reason TEXT,
+                detail_json TEXT, occurred_at TEXT, preceding_hash TEXT, event_hash TEXT);
+            CREATE TABLE work_record_projects (link_id TEXT PRIMARY KEY, record_id TEXT, project_id TEXT,
+                role TEXT, scope TEXT, basis TEXT, original_evidence_id TEXT, added_at TEXT, archived_at TEXT);
+            CREATE TABLE work_record_tags (record_id TEXT,tag_id TEXT,PRIMARY KEY(record_id,tag_id));
+            CREATE TABLE work_record_topics (record_id TEXT,topic_id TEXT,status TEXT,PRIMARY KEY(record_id,topic_id));
             CREATE TABLE retained (payload BLOB, number REAL);
             INSERT INTO work_meta VALUES ('data_revision','1');
             INSERT INTO work_meta VALUES ('baseline','fictional');
             INSERT INTO work_records VALUES ('fictional','title','original','body','hash','summary',
                 'role','layer','unreviewed','unknown','unknown','synthetic',1,'created','updated',NULL,NULL);
             INSERT INTO work_revisions VALUES ('fictional',1,'title','body','hash','summary',
-                'unreviewed','unknown','unknown',NULL,NULL);
-            INSERT INTO work_events VALUES (1,'event');
+                'unreviewed','unknown','unknown',NULL,NULL,'initial-historical-b-import');
+            INSERT INTO work_record_projects VALUES ('fictional-link','fictional','fictional-project',
+                'RELATED',NULL,'INHERITED_CLASSIFICATION_ONLY',NULL,'fictional-time',NULL);
+            INSERT INTO work_record_tags VALUES ('fictional','fictional-tag');
+            INSERT INTO work_record_topics VALUES ('fictional','fictional-topic','INHERITED');
             INSERT INTO retained VALUES (X'0001',1.5);
             INSERT INTO retained VALUES (X'0001',1.5);
         ''')
+        seed = hashlib.sha256(b'initial-historical-b-import|UTT-INTEGRATED-WORKSPACE/0.1').hexdigest()
+        self.parent.execute('INSERT INTO work_events VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+                            (1, 'initial-historical-b-import', 'IMPORT', None, None, 'SYSTEM',
+                             'USER_DIRECTED_DB_UPGRADE', 'fictional', '{}', 'fictional-time', None, seed))
         self.parent.commit()
         self.candidate = sqlite3.connect(':memory:')
         self.parent.backup(self.candidate)
@@ -326,12 +341,29 @@ class WorkspaceHistoryTests(unittest.TestCase):
             conn.execute('BEGIN')
         return compare_workspace_snapshots(self.parent, self.candidate)
 
+    def add_event(self, *, kind, record_id, record_version, details, actor='USER'):
+        previous = self.candidate.execute('SELECT sequence,event_hash FROM work_events ORDER BY sequence DESC LIMIT 1').fetchone()
+        sequence = previous[0] + 1
+        event_id = 'fictional-event-' + str(sequence)
+        payload = {'id': event_id, 'kind': kind, 'record_id': record_id, 'version': record_version,
+                   'actor': actor, 'reason': 'fictional', 'details': details,
+                   'predecessor': previous[1], 'at': 'fictional-time'}
+        raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+        digest = hashlib.sha256(raw.encode()).hexdigest()
+        self.candidate.execute('INSERT INTO work_events VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+                               (sequence, event_id, kind, record_id, record_version, actor, 'EXPLICIT_WORKSPACE_WRITE',
+                                'fictional', json.dumps(details, ensure_ascii=False, sort_keys=True, separators=(',', ':')),
+                                'fictional-time', previous[1], digest))
+        self.candidate.execute("UPDATE work_meta SET value=CAST(CAST(value AS INTEGER)+1 AS TEXT) WHERE key='data_revision'")
+        return event_id
+
     def edit(self, *, include_old=True, include_current=True, version=2):
         self.candidate.execute("UPDATE work_records SET title='new',version=?,updated_at='later'", (version,))
         if not include_old:
             self.candidate.execute('DELETE FROM work_revisions')
+        event_id = self.add_event(kind='EDIT', record_id='fictional', record_version=version, details={'fields': ['title']})
         if include_current:
-            self.candidate.execute("INSERT INTO work_revisions VALUES ('fictional',?,'new','body','hash','summary', 'unreviewed','unknown','unknown',NULL,NULL)", (version,))
+            self.candidate.execute("INSERT INTO work_revisions VALUES ('fictional',?,'new','body','hash','summary', 'unreviewed','unknown','unknown',NULL,NULL,?)", (version, event_id))
 
     def test_unchanged_preserves_all_rows(self):
         result = self.check()
@@ -365,7 +397,7 @@ class WorkspaceHistoryTests(unittest.TestCase):
 
     def test_event_or_duplicate_historical_rows_may_not_disappear(self):
         self.candidate.execute('DELETE FROM work_events')
-        self.assertEqual(self.check().code, 'PARENT_ROW_CONFLICT')
+        self.assertEqual(self.check().code, 'EVENT_HISTORY_CONFLICT')
 
     def test_duplicate_occurrences_and_blob_real_are_compared(self):
         self.candidate.execute('DELETE FROM retained WHERE rowid=1')
@@ -382,6 +414,20 @@ class WorkspaceHistoryTests(unittest.TestCase):
     def test_connection_must_have_query_only_transaction(self):
         from app.publisher_parent import compare_workspace_snapshots
         self.assertEqual(compare_workspace_snapshots(self.parent, self.candidate).code, 'SNAPSHOT_REQUIRED')
+
+    def test_parent_foreign_key_corruption_fails_before_comparison(self):
+        for conn in (self.parent, self.candidate):
+            conn.execute('CREATE TABLE related_record(id TEXT REFERENCES work_records(record_id))')
+        self.parent.execute("INSERT INTO related_record VALUES ('fictional-missing')")
+        self.assertEqual(self.check().code, 'FOREIGN_KEY_CONFLICT')
+
+    def test_parent_sqlite_integrity_failure_is_distinct(self):
+        for conn in (self.parent, self.candidate):
+            conn.execute('CREATE TABLE constrained_record(value INTEGER CHECK(value > 0))')
+        self.parent.execute('PRAGMA ignore_check_constraints=ON')
+        self.parent.execute('INSERT INTO constrained_record VALUES (-1)')
+        self.parent.execute('PRAGMA ignore_check_constraints=OFF')
+        self.assertEqual(self.check().code, 'SQLITE_INTEGRITY_CONFLICT')
 
     def test_old_view_and_trigger_are_preserved(self):
         for conn in (self.parent, self.candidate):
@@ -404,6 +450,176 @@ class WorkspaceHistoryTests(unittest.TestCase):
             conn.execute('INSERT INTO work_fts SELECT record_id,title,body FROM work_records')
         self.candidate.execute('DELETE FROM work_fts')
         self.assertEqual(self.check().code, 'WORK_FTS_MISMATCH')
+
+    def project_row(self, conn, link='fictional-link'):
+        names = ('link_id', 'record_id', 'project_id', 'role', 'scope', 'basis',
+                 'original_evidence_id', 'added_at', 'archived_at')
+        return dict(zip(names, conn.execute('SELECT ' + ','.join(names) + ' FROM work_record_projects WHERE link_id=?',
+                                            (link,)).fetchone()))
+
+    def test_project_archive_and_restore_preserve_exact_approved_history(self):
+        before = self.project_row(self.candidate)
+        self.candidate.execute("UPDATE work_record_projects SET archived_at='fictional-archive' WHERE link_id='fictional-link'")
+        archived = self.project_row(self.candidate)
+        self.add_event(kind='PROJECT_ARCHIVE', record_id='fictional', record_version=None,
+                       details={'link_id': 'fictional-link', 'before': before, 'after': archived})
+        self.assertEqual(self.check().status, 'WORKSPACE_HISTORY_PRESERVED')
+
+    def test_project_restore_event_preserves_original_basis_and_other_fields(self):
+        for conn in (self.parent, self.candidate):
+            conn.execute("UPDATE work_record_projects SET archived_at='fictional-archive' WHERE link_id='fictional-link'")
+        before = self.project_row(self.candidate)
+        self.candidate.execute("UPDATE work_record_projects SET archived_at=NULL WHERE link_id='fictional-link'")
+        after = self.project_row(self.candidate)
+        self.add_event(kind='PROJECT_RESTORE', record_id='fictional', record_version=None,
+                       details={'link_id': 'fictional-link', 'before': before, 'after': after})
+        self.assertEqual(self.check().status, 'WORKSPACE_HISTORY_PRESERVED')
+
+    def test_new_project_link_requires_original_event_and_user_basis(self):
+        self.candidate.execute("INSERT INTO work_record_projects VALUES ('new-link','fictional','new-project',"
+                               "'RELATED',NULL,'USER_CONFIRMED',NULL,'fictional-time',NULL)")
+        self.add_event(kind='PROJECT_LINK', record_id='fictional', record_version=None,
+                       details={'link_id': 'new-link', 'project_id': 'new-project', 'basis': 'USER_CONFIRMED'})
+        self.assertEqual(self.check().status, 'WORKSPACE_HISTORY_PRESERVED')
+
+    def test_untracked_project_change_or_approval_promotion_fails(self):
+        self.candidate.execute("UPDATE work_record_projects SET archived_at='fictional-archive' WHERE link_id='fictional-link'")
+        self.assertEqual(self.check().code, 'PROJECT_LINK_EVENT_CONFLICT')
+
+    def test_project_event_cannot_promote_an_inherited_basis(self):
+        before = self.project_row(self.candidate)
+        self.candidate.execute("UPDATE work_record_projects SET archived_at='fictional-archive',basis='USER_CONFIRMED' "
+                               "WHERE link_id='fictional-link'")
+        after = self.project_row(self.candidate)
+        self.add_event(kind='PROJECT_ARCHIVE', record_id='fictional', record_version=None,
+                       details={'link_id': 'fictional-link', 'before': before, 'after': after})
+        self.assertEqual(self.check().code, 'PROJECT_LINK_EVENT_CONFLICT')
+
+    def test_event_hash_and_revision_linkage_are_required(self):
+        self.edit()
+        self.candidate.execute("UPDATE work_revisions SET event_id='nonexistent' WHERE version=2")
+        self.assertEqual(self.check().code, 'REVISION_EVENT_CONFLICT')
+
+    def test_revision_cannot_exceed_the_current_record_version(self):
+        event = self.add_event(kind='EDIT', record_id='fictional', record_version=2, details={'fields': ['title']})
+        self.candidate.execute("INSERT INTO work_revisions VALUES ('fictional',2,'future','body','hash','summary',"
+                               "'unreviewed','unknown','unknown',NULL,NULL,?)", (event,))
+        self.assertEqual(self.check().code, 'WORK_REVISION_CONFLICT')
+
+    def test_event_hash_corruption_is_rejected(self):
+        self.edit()
+        self.candidate.execute("UPDATE work_events SET reason='changed' WHERE sequence=2")
+        self.assertEqual(self.check().code, 'EVENT_CHAIN_CONFLICT')
+
+    def test_data_revision_cannot_roll_back_or_advance_without_event(self):
+        self.candidate.execute("UPDATE work_meta SET value='0' WHERE key='data_revision'")
+        self.assertEqual(self.check().code, 'DATA_REVISION_CONFLICT')
+
+    def test_new_record_requires_create_event_and_exact_version_link(self):
+        self.candidate.execute("INSERT INTO work_records VALUES ('fictional-new','new','original','body','hash',"
+                               "'summary','role','layer','unreviewed','unknown','unknown','synthetic',1,"
+                               "'created','updated',NULL,NULL)")
+        event = self.add_event(kind='CREATE', record_id='fictional-new', record_version=1,
+                               details={'data_scope': 'USER_WORKSPACE'})
+        self.candidate.execute("INSERT INTO work_revisions VALUES ('fictional-new',1,'new','body','hash','summary',"
+                               "'unreviewed','unknown','unknown',NULL,NULL,?)", (event,))
+        self.assertEqual(self.check().status, 'WORKSPACE_HISTORY_PRESERVED')
+
+    def test_create_event_cannot_be_reused_as_edit_of_existing_record(self):
+        self.candidate.execute("UPDATE work_records SET title='new',version=2,updated_at='later'")
+        event = self.add_event(kind='CREATE', record_id='fictional', record_version=2,
+                               details={'data_scope': 'USER_WORKSPACE'})
+        self.candidate.execute("INSERT INTO work_revisions VALUES ('fictional',2,'new','body','hash','summary',"
+                               "'unreviewed','unknown','unknown',NULL,NULL,?)", (event,))
+        self.assertEqual(self.check().code, 'REVISION_EVENT_CONFLICT')
+
+    def test_event_sequence_and_revision_cannot_be_silently_advanced(self):
+        self.candidate.execute("INSERT INTO work_record_projects VALUES ('new-link','fictional','new-project',"
+                               "'RELATED',NULL,'USER_CONFIRMED',NULL,'fictional-time',NULL)")
+        self.assertEqual(self.check().code, 'PROJECT_LINK_EVENT_CONFLICT')
+
+    def test_original_tag_add_and_new_tag_remove_event_are_preserved(self):
+        self.candidate.execute("INSERT INTO work_record_tags VALUES ('fictional','new-tag')")
+        self.add_event(kind='TAG', record_id='fictional', record_version=None, details={'tag_id': 'new-tag'})
+        self.candidate.execute("DELETE FROM work_record_tags WHERE tag_id='fictional-tag'")
+        self.add_event(kind='TAG_REMOVE', record_id='fictional', record_version=None,
+                       details={'tag_id':'fictional-tag', 'before':{'record_id':'fictional','tag_id':'fictional-tag'},
+                                'after':None})
+        self.assertEqual(self.check().status, 'WORKSPACE_HISTORY_PRESERVED')
+
+    def test_topic_link_and_unlink_events_preserve_all_original_status(self):
+        self.candidate.execute("DELETE FROM work_record_topics WHERE topic_id='fictional-topic'")
+        self.add_event(kind='TOPIC_UNLINK', record_id='fictional', record_version=None,
+                       details={'topic_id':'fictional-topic',
+                                'before':{'record_id':'fictional','topic_id':'fictional-topic','status':'INHERITED'},
+                                'after':None})
+        self.candidate.execute("INSERT INTO work_record_topics VALUES ('fictional','new-topic','USER_CONFIRMED')")
+        self.add_event(kind='TOPIC_LINK', record_id='fictional', record_version=None,
+                       details={'topic_id':'new-topic', 'before':None,
+                                'after':{'record_id':'fictional','topic_id':'new-topic','status':'USER_CONFIRMED'}})
+        self.assertEqual(self.check().status, 'WORKSPACE_HISTORY_PRESERVED')
+
+    def test_relation_deletion_without_exact_before_event_fails(self):
+        self.candidate.execute("DELETE FROM work_record_tags WHERE tag_id='fictional-tag'")
+        self.add_event(kind='TAG_REMOVE', record_id='fictional', record_version=None,
+                       details={'tag_id':'fictional-tag', 'before':{'record_id':'different','tag_id':'fictional-tag'},
+                                'after':None})
+        self.assertEqual(self.check().code, 'RELATION_EVENT_CONFLICT')
+
+    def test_inherited_topic_cannot_be_invented_by_new_relation_event(self):
+        self.candidate.execute("INSERT INTO work_record_topics VALUES ('fictional','new-topic','INHERITED')")
+        self.add_event(kind='TOPIC_LINK', record_id='fictional', record_version=None,
+                       details={'topic_id':'new-topic', 'before':None,
+                                'after':{'record_id':'fictional','topic_id':'new-topic','status':'INHERITED'}})
+        self.assertEqual(self.check().code, 'RELATION_EVENT_CONFLICT')
+
+    def test_assistant_event_cannot_invent_user_confirmed_topic(self):
+        self.candidate.execute("INSERT INTO work_record_topics VALUES ('fictional','new-topic','USER_CONFIRMED')")
+        self.add_event(kind='TOPIC_LINK', record_id='fictional', record_version=None, actor='ASSISTANT',
+                       details={'topic_id':'new-topic', 'before':None,
+                                'after':{'record_id':'fictional','topic_id':'new-topic','status':'USER_CONFIRMED'}})
+        self.assertEqual(self.check().code, 'RELATION_EVENT_CONFLICT')
+
+
+class OriginalWriterPublicationTests(unittest.TestCase):
+    def test_original_codec_writer_history_can_be_published_without_losing_relations(self):
+        from app.publisher_parent import compare_workspace_snapshots
+        from app.workspace_write import OriginalWorkspaceEventCodec, WorkspaceWriter
+        from tests.test_publisher_workspace import make_fixture
+
+        with tempfile.TemporaryDirectory() as temp:
+            source = make_fixture(Path(temp) / 'fictional.sqlite')
+            parent, candidate = sqlite3.connect(':memory:'), sqlite3.connect(':memory:')
+            try:
+                source.execute("INSERT INTO work_projects(project_id,name) VALUES ('project','fictional project')")
+                source.execute("INSERT INTO work_topics(topic_id,name) VALUES ('topic','fictional topic')")
+                source.commit()
+                writer = WorkspaceWriter(source, codec=OriginalWorkspaceEventCodec())
+                source.backup(parent)
+
+                def command(operation, **fields):
+                    revision = source.execute("SELECT value FROM work_meta WHERE key='data_revision'").fetchone()[0]
+                    return writer.execute({'operation': operation, 'record_id': 'fictional-record',
+                                           'expected_version': 1, 'expected_data_revision': revision,
+                                           'reason': 'fictional direct user action', **fields})
+                command('project_add', link_id='link', project_id='project', role='RELATED',
+                        scope=None, basis='USER_CONFIRMED')
+                command('project_archive', link_id='link')
+                command('tag_add', tag_id='tag', tag_name='fictional tag')
+                command('tag_remove', tag_id='tag')
+                command('topic_add', topic_id='topic', status='USER_CONFIRMED')
+                command('topic_remove', topic_id='topic')
+                command('update', changes={'body': 'fictional changed body'})
+                source.backup(candidate)
+                for conn in (parent, candidate):
+                    conn.execute('PRAGMA query_only=ON')
+                    conn.execute('BEGIN')
+                result = compare_workspace_snapshots(parent, candidate)
+                self.assertEqual(result.status, 'WORKSPACE_HISTORY_PRESERVED', result.code)
+            finally:
+                parent.close()
+                candidate.close()
+                source.close()
 
 
 if __name__ == '__main__':

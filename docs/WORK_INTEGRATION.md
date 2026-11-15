@@ -453,6 +453,18 @@ Windows에서 Dropbox 접속 없이 로컬 workspace의 전수 목록·상세와
 .\.venv\Scripts\python.exe -m app.workspace_verify_windows
 ```
 
-`app/workspace_write.py`는 충돌 검사를 갖춘 트랜잭션 엔진이지만, 원래 `work_events`의 event_hash/preceding_hash 직렬화·genesis·검증 및 `data_revision` 규칙과 기존 `utt_workspace.py` 원문은 인계되지 않았다. 따라서 원본과 호환된 codec을 임의로 만들지 않았고 서버·UI의 실제 저장에는 연결하지 않았다. 기존 프로젝트 관계 행 변경 후 재발행을 위한 원본 이력에 근거한 비교와 프로젝트 외 관계 쓰기도 미완료다. `LOCAL_SAVED`와 Dropbox `PUBLISHED`는 서로 다른 상태이며, 이 코드에서 실제 통합된 쓰기·발행 흐름이 완성됐다고 보고하지 않는다. 실제 Windows·5,520건·Dropbox 발행 및 재접속 시험은 아직 NOT_RUN이다.
+이후 관리 인계 `db8903b`에서 기존 `utt_workspace.py` source-only 발췌와 `WORK_EVENTS_HASH_CHAIN.md`를 수신했다. 그 원본의 특별 IMPORT seed, Python 정렬 JSON·이벤트 해시, 정수 `data_revision` 증가를 구현하고 원본 verifier와 합성 대조했다. 생성·수정·보관·병합·복원·이전 revision 복원과 프로젝트·주제·태그 관계 변경은 별도 workspace 쓰기 계약에서 트랜잭션과 snapshot/data revision·기록 version을 검사한다. 원래 없던 관계 삭제·상태 변경은 전후 행을 보존하는 별도 사건으로 기록한다. 사건 해시는 원래 `authorization_basis`를 포함하지 않으며 체인 일치가 역사적 승인 진위의 증명은 아니다.
+
+`LOCAL_SAVED`는 사용자가 선택한 Windows 로컬 DB에 저장했다는 뜻이고 Dropbox `PUBLISHED`는 별도의 실제 발행 후 활성 DB 재조회까지 확인한 시점의 상태다. 같은 작업실에서 발행하는 실행 명령은 아래와 같다. 입력 DB와 임시 디렉터리는 보호된 사용자 전용 환경에서 지정하고 다른 편집기는 중지한다. 프로그램 실행만으로 Dropbox 인증이나 발행은 시작하지 않으며 작업실에서 사용자가 직접 발행 동작을 선택한다.
+
+```powershell
+.\.venv\Scripts\python.exe -m app.workspace_windows
+```
+
+기본 작업실 포트 8765가 사용 중이면 `--port 8766`처럼 다른 로컬 포트를 지정한다. 앱 키와 기존 등록 redirect URI는 Windows 콘솔에서만 입력한다. Dropbox 표시의 발행 확인은 마지막 확인 시점의 결과이며 다른 프로그램이 이후 원격 기준을 바꾸지 않았다는 실시간 보증이 아니다.
+
+가상 HTTPS 발행과 재접속 시험은 실제 Windows·5,520건·Dropbox 발행 및 재접속 시험을 뜻하지 않는다. 이 실사용 단계는 아직 NOT_RUN이다. 원생 BLOB 표현의 일반 규격, 512 MiB 초과 workspace와 Windows에서 같은 DB의 재백업 바이트 안정성도 미확인이다. 재백업이 달라지거나 부모 이력이 일치하지 않으면 발행하지 않는다.
 
 이번 변경의 합성 회귀 `20261115T093700Z-3c7ff416`은 15단계, Python 464개, Node 50개, 원형 38개와 Chromium workspace 및 기존 UI 검사를 통과했다. 독립 쓰기 엔진의 최종 보안 보강 시험 16개도 별도로 통과했다. 검증은 변경된 작업트리에서 수행했으며 실제 DB·Dropbox와는 구별한다.
+
+원본 writer 인계 후 최종 합성 검사 `20261115T095330Z-2157de4e`는 전체 16단계, Python 525개, Node 52개와 원형 38개·기존 Chromium·실제 로컬 runtime/가상 Dropbox Chromium을 통과했다. 이후 쓰기 HTTP의 승인 상태 임의 변경 차단과 명시적 재조회 검사를 별도로 통과했다. 합성 발행은 실제 자격증명·운영 DB·Dropbox 발행이 아니다.

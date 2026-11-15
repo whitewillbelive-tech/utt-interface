@@ -1,18 +1,20 @@
-"""Transactional workspace changes with an explicit, externally verified event codec.
+"""Transactional workspace changes with the original event-chain protocol.
 
-This module does not define the existing workspace event/hash protocol.  No
-codec is bundled: callers MUST supply an implementation verified against the
-original workspace program and its event/history contract.  In particular a
-schema alone is not evidence for the event hash or data_revision algorithm.
-The callable codec is trusted application code, not a Python sandbox.
+The codec below is based on docs/publisher-reference/utt_workspace.py and its
+documented historical import seed. Hash verification does not authenticate the
+actor, authorization_basis, or decisions: a caller must provide a separately
+authenticated direct user action. Python callbacks are not a security sandbox.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import datetime
 import hashlib
 import json
+import re
 import sqlite3
 import threading
+import uuid
 from typing import Any, Protocol
 
 from app.publisher_workspace import WorkspaceError, _validate_workspace
@@ -46,14 +48,89 @@ class WorkspaceEventCodec(Protocol):
     verify_history is given ordered existing work_events (including the stored
     hashes), and must verify the complete original chain, including genesis.
     encode returns an event for precisely the proposed change and sequence.
-    The caller must verify this implementation against original source before
-    using it with production data. There is intentionally no fallback codec.
+    The caller must verify any alternate implementation against original source
+    before using it with production data. There is no implicit fallback codec.
     """
     def verify_history(self, events: tuple[tuple[Any, ...], ...]) -> bool: ...
     def encode(self, *, sequence: int, previous_hash: str | None,
                current_data_revision: str, operation: str, record_id: str,
-               record_version: int, before: dict | None, after: dict,
+               record_version: int | None, before: dict | None, after: dict,
                detail: dict, reason: str) -> EncodedEvent: ...
+
+
+def _native_json(value):
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+
+
+def _native_sha(value):
+    return hashlib.sha256(value.encode('utf-8')).hexdigest()
+
+
+class OriginalWorkspaceEventCodec:
+    """Original non-import canonical hash and special fixed IMPORT seed.
+
+    PROJECT_ARCHIVE/PROJECT_RESTORE are explicit extensions: details contain
+    link_id and before/after rows, and are hashed by the original formula.
+    """
+    def verify_history(self, events):
+        previous = None
+        try:
+            for index, row in enumerate(events):
+                if len(row) != len(_EVENT_FIELDS):
+                    return False
+                event = dict(zip(_EVENT_FIELDS, row))
+                if event['preceding_hash'] != previous:
+                    return False
+                if index == 0 and event['event_kind'] == 'IMPORT':
+                    expected = _native_sha('initial-historical-b-import|UTT-INTEGRATED-WORKSPACE/0.1')
+                else:
+                    payload = {'id': event['event_id'], 'kind': event['event_kind'],
+                               'record_id': event['record_id'], 'version': event['record_version'],
+                               'actor': event['actor'], 'reason': event['reason'],
+                               'details': json.loads(event['detail_json']),
+                               'predecessor': event['preceding_hash'], 'at': event['occurred_at']}
+                    expected = _native_sha(_native_json(payload))
+                if expected != event['event_hash']:
+                    return False
+                previous = event['event_hash']
+            return True
+        except (TypeError, ValueError, UnicodeError, RecursionError):
+            return False
+
+    def encode(self, *, sequence, previous_hash, current_data_revision, operation, record_id,
+               record_version, before, after, detail, reason):
+        kinds = {'create': 'CREATE', 'update': 'EDIT', 'archive': 'ARCHIVE', 'merge': 'MERGE',
+                 'project_add': 'PROJECT_LINK', 'project_archive': 'PROJECT_ARCHIVE',
+                 'project_restore': 'PROJECT_RESTORE', 'restore_revision': 'RESTORE_REVISION',
+                 'tag_add': 'TAG', 'tag_remove': 'TAG_REMOVE', 'topic_add': 'TOPIC_LINK', 'topic_remove': 'TOPIC_UNLINK'}
+        if operation == 'restore':
+            kind = 'UNMERGE' if detail['restore_merge'] else 'RESTORE'
+        else:
+            kind = kinds[operation]
+        if operation == 'create':
+            details = {'data_scope': 'USER_WORKSPACE'}
+        elif operation == 'update':
+            details = {'fields': sorted(detail['changes'])}
+        elif operation in ('archive', 'merge', 'restore'):
+            details = {'merged_target_present': operation == 'merge'}
+        elif operation == 'project_add':
+            details = {'project_id': detail['project_id'], 'link_id': detail['link_id'], 'basis': detail['basis']}
+        elif operation in ('project_archive', 'project_restore'):
+            details = {'link_id': detail['link_id'], 'before': detail['relation_before'], 'after': detail['relation_after']}
+        elif operation == 'tag_add':
+            details = {'tag_id': detail['tag_id']}
+        elif operation == 'tag_remove':
+            details = {'tag_id': detail['tag_id'], 'before': detail['relation_before'], 'after': detail['relation_after']}
+        elif operation in ('topic_add', 'topic_remove'):
+            details = {'topic_id': detail['topic_id'], 'before': detail['relation_before'], 'after': detail['relation_after']}
+        else:
+            details = {'restored_version': detail['restore_version']}
+        event_id = 'evt-' + uuid.uuid4().hex
+        at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        payload = {'id': event_id, 'kind': kind, 'record_id': record_id, 'version': record_version,
+                   'actor': 'USER', 'reason': reason, 'details': details, 'predecessor': previous_hash, 'at': at}
+        return EncodedEvent(event_id, kind, 'EXPLICIT_WORKSPACE_WRITE', reason, _native_json(details),
+                            at, previous_hash, _native_sha(_native_json(payload)), str(int(current_data_revision) + 1))
 
 
 @dataclass(frozen=True, repr=False)
@@ -115,6 +192,16 @@ def _project_link(conn, record_id, link_id):
     return dict(zip(fields, row)) if row is not None else None
 
 
+def _small_link(conn, record_id, kind, identity):
+    if kind == 'tag':
+        fields, table, key = ('record_id', 'tag_id'), 'work_record_tags', 'tag_id'
+    else:
+        fields, table, key = ('record_id', 'topic_id', 'status'), 'work_record_topics', 'topic_id'
+    row = conn.execute('SELECT ' + ','.join(fields) + ' FROM ' + table + ' WHERE record_id=? AND ' + key + '=?',
+                       (record_id, identity)).fetchone()
+    return dict(zip(fields, row)) if row is not None else None
+
+
 def _check_revision(conn, old):
     row = conn.execute('SELECT ' + ','.join(_REV_FIELDS) + ' FROM work_revisions '
                        'WHERE record_id=? AND version=?', (old['record_id'], old['version'])).fetchone()
@@ -165,10 +252,12 @@ def _event_context(conn, codec):
 
 def _insert_event(conn, codec, *, context, operation, before, after, detail, reason):
     sequence, previous, data_revision = context
+    relation_only = operation in ('project_add', 'project_archive', 'project_restore', 'tag_add', 'tag_remove', 'topic_add', 'topic_remove')
+    event_version = None if relation_only else after['version']
     try:
         event = codec.encode(sequence=sequence, previous_hash=previous,
                              current_data_revision=data_revision, operation=operation,
-                             record_id=after['record_id'], record_version=after['version'],
+                             record_id=after['record_id'], record_version=event_version,
                              before=dict(before) if before is not None else None,
                              after=dict(after), detail=dict(detail), reason=reason)
     except Exception:
@@ -185,16 +274,18 @@ def _insert_event(conn, codec, *, context, operation, before, after, detail, rea
     except (ValueError, TypeError, RecursionError):
         raise WorkspaceWriteError('INVALID_ENCODED_EVENT') from None
     conn.execute('INSERT INTO work_events (' + ','.join(_EVENT_FIELDS) + ') VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-                 (sequence, event.event_id, event.event_kind, after['record_id'], after['version'], 'USER',
+                 (sequence, event.event_id, event.event_kind, after['record_id'], event_version, 'USER',
                   event.authorization_basis, event.reason, event.detail_json, event.occurred_at,
                   event.preceding_hash, event.event_hash))
     changed = conn.execute("UPDATE work_meta SET value=? WHERE key='data_revision' AND value=?",
                            (event.data_revision, data_revision)).rowcount
     if changed != 1:
         raise WorkspaceWriteError('DATA_REVISION_CONFLICT')
-    conn.execute('INSERT INTO work_revisions(record_id,version,' + ','.join(_REV_FIELDS) + ',event_id) '
-                 'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-                 (after['record_id'], after['version'], *(after[k] for k in _REV_FIELDS), event.event_id))
+    if not relation_only:
+        conn.execute('INSERT INTO work_revisions(record_id,version,' + ','.join(_REV_FIELDS) + ',event_id,created_at) '
+                     'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                     (after['record_id'], after['version'], *(after[k] for k in _REV_FIELDS), event.event_id,
+                      datetime.datetime.now(datetime.timezone.utc).isoformat()))
     return WriteResult(after['record_id'], after['version'], event.event_id)
 
 
@@ -215,21 +306,29 @@ class WorkspaceWriter:
         # One connection cannot safely host concurrent transactions.  Callers
         # must not use the same connection through a second writer or directly.
         with self._lock:
-            return self._execute(command)
+            row_factory = self._conn.row_factory
+            self._conn.row_factory = None
+            try:
+                return self._execute(command)
+            finally:
+                self._conn.row_factory = row_factory
 
     def _execute(self, command: dict) -> WriteResult:
         if type(command) is not dict:
             raise WorkspaceWriteError('INVALID_REQUEST')
         op = command.get('operation')
         rid, reason = command.get('record_id'), command.get('reason')
-        if (op not in ('create', 'update', 'archive', 'merge', 'restore', 'project_add', 'project_archive', 'project_restore')
+        if (op not in ('create', 'update', 'archive', 'merge', 'restore', 'restore_revision', 'project_add', 'project_archive', 'project_restore', 'tag_add', 'tag_remove', 'topic_add', 'topic_remove')
                 or not _id(rid) or not _id(reason)):
             raise WorkspaceWriteError('INVALID_REQUEST')
         extras = {'create': {'record'}, 'update': {'changes'}, 'archive': set(),
                   'merge': {'target_record_id', 'target_expected_version'}, 'restore': {'restore_archive', 'restore_merge'},
+                  'restore_revision': {'restore_version'},
                   'project_add': {'link_id', 'project_id', 'role', 'scope', 'basis'},
-                  'project_archive': {'link_id'}, 'project_restore': {'link_id'}}
-        if set(command) - ({'operation', 'record_id', 'reason', 'expected_version'} | extras[op]):
+                  'project_archive': {'link_id'}, 'project_restore': {'link_id'},
+                  'tag_add': {'tag_id', 'tag_name'}, 'tag_remove': {'tag_id'},
+                  'topic_add': {'topic_id', 'status'}, 'topic_remove': {'topic_id'}}
+        if set(command) - ({'operation', 'record_id', 'reason', 'expected_version', 'expected_data_revision'} | extras[op]):
             raise WorkspaceWriteError('INVALID_REQUEST')
         conn = self._conn
         if conn.in_transaction:
@@ -247,32 +346,50 @@ class WorkspaceWriter:
             if triggers != {'work_fts_insert', 'work_fts_update', 'work_fts_delete'}:
                 raise WorkspaceWriteError('SCHEMA_MISMATCH')
             context = _event_context(conn, self._codec)
+            expected_revision = command.get('expected_data_revision')
+            if type(expected_revision) is not str or not expected_revision:
+                raise WorkspaceWriteError('EXPECTED_DATA_REVISION_REQUIRED')
+            if expected_revision != context[2]:
+                raise WorkspaceWriteError('DATA_REVISION_CONFLICT')
             old = _record(conn, rid)
             relation_before = None
             if op in ('project_add', 'project_archive', 'project_restore') and _id(command.get('link_id')):
                 relation_before = _project_link(conn, rid, command['link_id'])
+            tag_id = command.get('tag_id')
+            if op == 'tag_add' and _id(command.get('tag_name')):
+                existing_tag = conn.execute('SELECT tag_id FROM work_tags WHERE name=? COLLATE NOCASE',
+                                            (command['tag_name'].strip(),)).fetchone()
+                if existing_tag:
+                    tag_id = existing_tag[0]
+            if op in ('tag_add', 'tag_remove') and _id(tag_id):
+                relation_before = _small_link(conn, rid, 'tag', tag_id)
+            if op in ('topic_add', 'topic_remove') and _id(command.get('topic_id')):
+                relation_before = _small_link(conn, rid, 'topic', command['topic_id'])
             target_before = _record(conn, command.get('target_record_id')) if op == 'merge' and _id(command.get('target_record_id')) else None
             if op == 'create':
                 if old is not None or command.get('expected_version') is not None:
                     raise WorkspaceWriteError('RECORD_EXISTS')
+                if not re.fullmatch(r'usr-[0-9a-f]{32}', rid):
+                    raise WorkspaceWriteError('INVALID_REQUEST')
                 required = {'title', 'body', 'summary', 'document_role', 'review_status', 'adoption_status', 'source_kind'}
                 values = command.get('record')
                 if type(values) is not dict or set(values) != required:
                     raise WorkspaceWriteError('INVALID_REQUEST')
-                if (not _title(values['title']) or not _text(values['body'], limit=16 * 1024 * 1024)
+                if (not _title(values['title']) or not values['title'].strip() or not _text(values['body'], limit=16 * 1024 * 1024)
                         or not _text(values['summary'], nullable=True) or
                         any(not _id(values[k]) for k in ('document_role', 'review_status', 'adoption_status', 'source_kind'))):
                     raise WorkspaceWriteError('INVALID_REQUEST')
                 # A new user-authored item must not be presented as an old
                 # inherited source or an already approved/adopted decision.
-                if (values['review_status'] != 'PENDING' or values['adoption_status'] != 'UNREVIEWED'
-                        or values['source_kind'] != 'USER_CREATED'):
+                if (values['review_status'] != 'PENDING_USER_REVIEW' or values['adoption_status'] != 'NEW_WORKSPACE_RECORD'
+                        or values['source_kind'] != 'USER_WORKSPACE'):
                     raise WorkspaceWriteError('NEW_RECORD_PROVENANCE_INVALID')
+                now = datetime.datetime.now(datetime.timezone.utc).isoformat()
                 conn.execute('INSERT INTO work_records(record_id,title,body,body_sha256,summary,document_role,'
-                             'review_status,adoption_status,decision_status,source_kind,version) VALUES (?,?,?,?,?,?,?,?,?,?,1)',
-                             (rid, values['title'], values['body'], _hash_body(values['body']), values['summary'],
+                             'review_status,adoption_status,decision_status,source_kind,version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?)',
+                             (rid, values['title'].strip(), values['body'], _hash_body(values['body']), values['summary'],
                               values['document_role'], values['review_status'], values['adoption_status'],
-                              'UNREVIEWED', values['source_kind']))
+                              'UNREVIEWED', values['source_kind'], now, now))
             else:
                 version = command.get('expected_version')
                 if type(version) is not int or not 1 <= version < 2**63 - 1:
@@ -282,16 +399,25 @@ class WorkspaceWriter:
                 if old['version'] != version:
                     raise WorkspaceWriteError('VERSION_CONFLICT')
                 _check_revision(conn, old)
-                self._change(conn, old, op, command)
-                updated = conn.execute('UPDATE work_records SET version=version+1,updated_at=CURRENT_TIMESTAMP '
-                                       'WHERE record_id=? AND version=?', (rid, version)).rowcount
-                if updated != 1:
-                    raise WorkspaceWriteError('VERSION_CONFLICT')
+                self._change(conn, old, op, command, tag_id=tag_id)
+                if op not in ('project_add', 'project_archive', 'project_restore', 'tag_add', 'tag_remove', 'topic_add', 'topic_remove'):
+                    updated = conn.execute('UPDATE work_records SET version=version+1,updated_at=? '
+                                           'WHERE record_id=? AND version=?',
+                                           (datetime.datetime.now(datetime.timezone.utc).isoformat(), rid, version)).rowcount
+                    if updated != 1:
+                        raise WorkspaceWriteError('VERSION_CONFLICT')
             after = _record(conn, rid)
-            detail = {k: v for k, v in command.items() if k not in ('record_id', 'reason', 'expected_version')}
+            detail = {k: v for k, v in command.items() if k not in ('record_id', 'reason', 'expected_version', 'expected_data_revision')}
             if op in ('project_add', 'project_archive', 'project_restore'):
                 detail['relation_before'] = relation_before
                 detail['relation_after'] = _project_link(conn, rid, command['link_id'])
+            if op in ('tag_add', 'tag_remove'):
+                detail['tag_id'] = tag_id
+                detail['relation_before'] = relation_before
+                detail['relation_after'] = _small_link(conn, rid, 'tag', tag_id)
+            if op in ('topic_add', 'topic_remove'):
+                detail['relation_before'] = relation_before
+                detail['relation_after'] = _small_link(conn, rid, 'topic', command['topic_id'])
             if op == 'merge':
                 detail['target_before'] = target_before
             result = _insert_event(conn, self._codec, context=context, operation=op, before=old,
@@ -330,16 +456,19 @@ class WorkspaceWriter:
             raise
 
     @staticmethod
-    def _change(conn, old, op, command):
+    def _change(conn, old, op, command, *, tag_id=None):
         rid = old['record_id']
         if op == 'update':
             fields = command.get('changes')
-            if type(fields) is not dict or not fields or not set(fields) <= {'title', 'body', 'summary'}:
+            if type(fields) is not dict or not fields or not set(fields) <= {'title', 'body', 'summary', 'review_status'}:
                 raise WorkspaceWriteError('INVALID_REQUEST')
-            if (('title' in fields and not _title(fields['title'])) or
+            if (('title' in fields and (not _title(fields['title']) or not fields['title'].strip())) or
                     ('body' in fields and not _text(fields['body'], limit=16 * 1024 * 1024)) or
-                    ('summary' in fields and not _text(fields['summary'], nullable=True))):
+                    ('summary' in fields and not _text(fields['summary'], nullable=True)) or
+                    ('review_status' in fields and not _id(fields['review_status']))):
                 raise WorkspaceWriteError('INVALID_REQUEST')
+            if all(old[k] == value for k, value in fields.items()):
+                raise WorkspaceWriteError('NO_CHANGE')
             values = dict(fields)
             if 'body' in values:
                 values['body_sha256'] = _hash_body(values['body'])
@@ -348,11 +477,12 @@ class WorkspaceWriter:
         elif op == 'archive':
             if old['archived_at'] is not None:
                 raise WorkspaceWriteError('INVALID_STATE')
-            conn.execute('UPDATE work_records SET archived_at=CURRENT_TIMESTAMP WHERE record_id=?', (rid,))
+            conn.execute('UPDATE work_records SET archived_at=? WHERE record_id=?',
+                         (datetime.datetime.now(datetime.timezone.utc).isoformat(), rid))
         elif op == 'merge':
             target = command.get('target_record_id')
             target_version = command.get('target_expected_version')
-            if (not _id(target) or target == rid or old['merged_into'] is not None
+            if (not _id(target) or target == rid or old['merged_into'] is not None or old['archived_at'] is not None
                     or type(target_version) is not int or target_version < 1):
                 raise WorkspaceWriteError('INVALID_REQUEST')
             other = _record(conn, target)
@@ -363,17 +493,80 @@ class WorkspaceWriter:
             _check_revision(conn, other)
             if conn.execute('SELECT 1 FROM work_records WHERE merged_into=? LIMIT 1', (rid,)).fetchone():
                 raise WorkspaceWriteError('MERGE_CHAIN_CONFLICT')
-            conn.execute('UPDATE work_records SET merged_into=? WHERE record_id=?', (target, rid))
+            conn.execute('UPDATE work_records SET merged_into=?,archived_at=? WHERE record_id=?',
+                         (target, datetime.datetime.now(datetime.timezone.utc).isoformat(), rid))
         elif op == 'restore':
             archive, merge = command.get('restore_archive'), command.get('restore_merge')
             if type(archive) is not bool or type(merge) is not bool or not (archive or merge):
                 raise WorkspaceWriteError('INVALID_REQUEST')
             if archive and old['archived_at'] is None or merge and old['merged_into'] is None:
                 raise WorkspaceWriteError('INVALID_STATE')
-            if archive:
+            if archive and not merge and old['merged_into'] is not None:
+                raise WorkspaceWriteError('INVALID_STATE')
+            if archive or merge:
                 conn.execute('UPDATE work_records SET archived_at=NULL WHERE record_id=?', (rid,))
             if merge:
                 conn.execute('UPDATE work_records SET merged_into=NULL WHERE record_id=?', (rid,))
+        elif op == 'restore_revision':
+            restore_version = command.get('restore_version')
+            if type(restore_version) is not int or restore_version < 1:
+                raise WorkspaceWriteError('INVALID_REQUEST')
+            row = conn.execute('SELECT ' + ','.join(_REV_FIELDS) + ' FROM work_revisions WHERE record_id=? AND version=?',
+                               (rid, restore_version)).fetchone()
+            if row is None:
+                raise WorkspaceWriteError('REVISION_NOT_FOUND')
+            values = dict(zip(_REV_FIELDS, row))
+            if values['body_sha256'] != _hash_body(values['body']):
+                raise WorkspaceWriteError('BODY_HASH_MISMATCH')
+            prior_target = values['merged_into']
+            if prior_target is not None:
+                target_record = _record(conn, prior_target)
+                if (target_record is None or target_record['archived_at'] is not None
+                        or target_record['merged_into'] is not None):
+                    raise WorkspaceWriteError('INVALID_MERGE_TARGET')
+                if conn.execute('SELECT 1 FROM work_records WHERE merged_into=? LIMIT 1', (rid,)).fetchone():
+                    raise WorkspaceWriteError('MERGE_CHAIN_CONFLICT')
+            conn.execute('UPDATE work_records SET ' + ','.join(k + '=?' for k in _REV_FIELDS) + ' WHERE record_id=?',
+                         (*(values[k] for k in _REV_FIELDS), rid))
+        elif op in ('tag_add', 'tag_remove'):
+            if not _id(tag_id):
+                raise WorkspaceWriteError('INVALID_REQUEST')
+            existing = _small_link(conn, rid, 'tag', tag_id)
+            if op == 'tag_add':
+                name = command.get('tag_name')
+                if not _id(name) or not _id(command.get('tag_id')):
+                    raise WorkspaceWriteError('INVALID_REQUEST')
+                if existing is not None:
+                    raise WorkspaceWriteError('RELATION_EXISTS')
+                tag = conn.execute('SELECT name FROM work_tags WHERE tag_id=?', (tag_id,)).fetchone()
+                if tag is None:
+                    conn.execute('INSERT INTO work_tags(tag_id,name) VALUES (?,?)', (tag_id, name.strip()))
+                elif conn.execute('SELECT 1 FROM work_tags WHERE tag_id=? AND name=? COLLATE NOCASE',
+                                  (tag_id, name.strip())).fetchone() is None:
+                    raise WorkspaceWriteError('TAG_ID_CONFLICT')
+                conn.execute('INSERT INTO work_record_tags(record_id,tag_id) VALUES (?,?)', (rid, tag_id))
+            else:
+                if existing is None:
+                    raise WorkspaceWriteError('RELATION_NOT_FOUND')
+                conn.execute('DELETE FROM work_record_tags WHERE record_id=? AND tag_id=?', (rid, tag_id))
+        elif op in ('topic_add', 'topic_remove'):
+            topic_id = command.get('topic_id')
+            if not _id(topic_id):
+                raise WorkspaceWriteError('INVALID_REQUEST')
+            existing = _small_link(conn, rid, 'topic', topic_id)
+            if op == 'topic_add':
+                if command.get('status') not in ('USER_CONFIRMED', 'CANDIDATE'):
+                    raise WorkspaceWriteError('INVALID_REQUEST')
+                if existing is not None:
+                    raise WorkspaceWriteError('RELATION_EXISTS')
+                if not conn.execute('SELECT 1 FROM work_topics WHERE topic_id=?', (topic_id,)).fetchone():
+                    raise WorkspaceWriteError('TOPIC_NOT_FOUND')
+                conn.execute('INSERT INTO work_record_topics(record_id,topic_id,status) VALUES (?,?,?)',
+                             (rid, topic_id, command['status']))
+            else:
+                if existing is None:
+                    raise WorkspaceWriteError('RELATION_NOT_FOUND')
+                conn.execute('DELETE FROM work_record_topics WHERE record_id=? AND topic_id=?', (rid, topic_id))
         else:
             link = command.get('link_id')
             if not _id(link):
@@ -381,7 +574,7 @@ class WorkspaceWriter:
             if op == 'project_add':
                 project, role, scope, basis = (command.get(k) for k in ('project_id', 'role', 'scope', 'basis'))
                 if (not _id(project) or not _id(role) or not _text(scope, nullable=True, limit=512)
-                        or basis not in ('USER_CONFIRMED', 'CANDIDATE')):
+                        or scope is not None or basis != 'USER_CONFIRMED'):
                     raise WorkspaceWriteError('INVALID_REQUEST')
                 if not conn.execute('SELECT 1 FROM work_projects WHERE project_id=?', (project,)).fetchone():
                     raise WorkspaceWriteError('PROJECT_NOT_FOUND')

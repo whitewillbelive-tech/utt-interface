@@ -147,6 +147,71 @@ export class ReadClient {
     }
     return result;
   }
+  async workspaceWrite(scope,command) {
+    if(typeof scope?.dataset_id!=='string'||!scope.dataset_id||typeof scope?.snapshot_id!=='string'||!scope.snapshot_id||
+       !command||typeof command!=='object'||Array.isArray(command)||typeof command.record_id!=='string'||!command.record_id||
+       !['create','update','archive','merge','restore','restore_revision','project_add','project_archive','project_restore','topic_add','topic_remove','tag_add','tag_remove'].includes(command.operation))
+      throw Object.assign(Error('잘못된 변경 요청'),{code:'INVALID_REQUEST'});
+    const extras={create:['record'],update:['changes'],archive:[],merge:['target_record_id','target_expected_version'],restore:['restore_archive','restore_merge'],
+      restore_revision:['restore_version'],project_add:['link_id','project_id','role','scope'],project_archive:['link_id'],project_restore:['link_id'],
+      topic_add:['topic_id'],topic_remove:['topic_id'],tag_add:['tag_id','tag_name'],tag_remove:['tag_id']};
+    const allowed=new Set(['operation','record_id','expected_version','reason',...extras[command.operation]]);
+    if(Object.keys(command).some(k=>!allowed.has(k))||typeof command.reason!=='string'||!command.reason.trim()||
+       (command.operation==='create'?command.expected_version!==null:!Number.isSafeInteger(command.expected_version)||command.expected_version<1)||
+       (command.operation==='merge'&&(!Number.isSafeInteger(command.target_expected_version)||command.target_expected_version<1||typeof command.target_record_id!=='string'||!command.target_record_id)))
+      throw Object.assign(Error('잘못된 변경 요청'),{code:'INVALID_REQUEST'});
+    const request={contract_version:'UTT-WORKSPACE-WRITE/0.1',dataset_id:scope.dataset_id,snapshot_id:scope.snapshot_id,...command};
+    let response,result;
+    try{
+      response=await this.fetcher('/api/workspace/write',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)});
+      result=await response.json();
+    }catch(error){throw Object.assign(Error('저장 결과를 확인할 수 없습니다.'),{code:'WRITE_OUTCOME_UNKNOWN'});}
+    if(!result||result.contract_version!=='UTT-WORKSPACE-WRITE/0.1'||!['OK','ERROR'].includes(result.status))
+      throw Object.assign(Error('저장 결과를 확인할 수 없습니다.'),{code:'WRITE_OUTCOME_UNKNOWN'});
+    if(!response.ok&&response.status>=500)throw Object.assign(Error('저장 결과를 확인할 수 없습니다.'),{code:'WRITE_OUTCOME_UNKNOWN'});
+    if(result.status==='ERROR'){
+      const codes=['VERSION_CONFLICT','VERSION_MISMATCH','TARGET_VERSION_CONFLICT','DATA_REVISION_CONFLICT','COMMIT_UNKNOWN','LOCAL_SAVED_REFRESH_REQUIRED','PUBLISH_IN_PROGRESS','INVALID_REQUEST','INVALID_STATE','RECORD_NOT_FOUND','INVALID_MERGE_TARGET','RECORD_EXISTS','ACCESS_DENIED','RELATION_EXISTS','PROJECT_NOT_FOUND'];
+      const code=codes.includes(result.error?.code)?result.error.code:'WRITE_FAILED';
+      throw Object.assign(Error('작업 DB 변경을 완료하지 못했습니다.'),{code});
+    }
+    if(!response.ok||result.dataset_id!==scope.dataset_id||typeof result.snapshot_id!=='string'||!result.snapshot_id||
+       result.record_id!==command.record_id||!Number.isSafeInteger(result.version)||result.version<1||
+       result.local_status!=='LOCAL_SAVED'||result.dropbox_status!=='UNPUBLISHED')
+      throw Object.assign(Error('저장 결과를 확인할 수 없습니다.'),{code:'WRITE_OUTCOME_UNKNOWN'});
+    return result;
+  }
+  async workspacePublishStatus(scope,signal) {
+    let response,result;
+    try{response=await this.fetcher('/api/workspace/publish-status',{signal});if(response.status===404||response.status===405)return null;result=await response.json();}
+    catch(error){if(error.name==='AbortError')throw error;throw Object.assign(Error('Dropbox 상태 확인에 실패했습니다.'),{code:'CONNECTION_UNAVAILABLE'});}
+    if(!response.ok||!result||result.contract_version!=='UTT-WORKSPACE-PUBLISH/0.1'||result.dataset_id!==scope?.dataset_id||
+       result.snapshot_id!==scope?.snapshot_id||!['READY','RUNNING','PUBLISHED','UNPUBLISHED','UNKNOWN','ERROR'].includes(result.status))
+      throw Object.assign(Error('Dropbox 상태 범위가 맞지 않습니다.'),{code:'RESPONSE_SCOPE_MISMATCH'});
+    return result;
+  }
+  async workspacePublish(scope) {
+    if(typeof scope?.dataset_id!=='string'||!scope.dataset_id||typeof scope?.snapshot_id!=='string'||!scope.snapshot_id)
+      throw Object.assign(Error('잘못된 Dropbox 반영 요청'),{code:'INVALID_REQUEST'});
+    let response,result;
+    try{
+      response=await this.fetcher('/api/workspace/publish',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({contract_version:'UTT-WORKSPACE-PUBLISH/0.1',dataset_id:scope.dataset_id,snapshot_id:scope.snapshot_id})});
+      result=await response.json();
+    }catch(error){throw Object.assign(Error('Dropbox 반영 결과를 확인할 수 없습니다.'),{code:'PUBLISH_OUTCOME_UNKNOWN'});}
+    if(!response.ok||!result||result.contract_version!=='UTT-WORKSPACE-PUBLISH/0.1'||result.dataset_id!==scope.dataset_id||
+       result.snapshot_id!==scope.snapshot_id||!['RUNNING','PUBLISHED','UNPUBLISHED','UNKNOWN','ERROR'].includes(result.status))
+      throw Object.assign(Error('Dropbox 반영 결과를 확인할 수 없습니다.'),{code:'PUBLISH_OUTCOME_UNKNOWN'});
+    return result;
+  }
+  async workspaceRefresh() {
+    let response,result;
+    try{response=await this.fetcher('/api/workspace/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contract_version:'UTT-WORKSPACE-STATUS/0.1'})});result=await response.json();}
+    catch(error){throw Object.assign(Error('현재 저장 상태를 확인할 수 없습니다.'),{code:'CONNECTION_UNAVAILABLE'});}
+    if(!response.ok||!result||result.contract_version!=='UTT-WORKSPACE-STATUS/0.1'||result.status!=='OK'||
+       typeof result.dataset_id!=='string'||!result.dataset_id||typeof result.snapshot_id!=='string'||!result.snapshot_id)
+      throw Object.assign(Error('현재 저장 상태를 확인할 수 없습니다.'),{code:'CONNECTION_UNAVAILABLE'});
+    return result;
+  }
   async read(operation, values={}, signal) {
     const request=Object.freeze(makeRequest(operation,{dataset_id:this.dataset?.dataset_id??null,snapshot_id:this.dataset?.snapshot_id??null,...values}));
     const response=await this.fetchResponse('/api/read',{method:'POST',headers:{'Content-Type':'application/json'},

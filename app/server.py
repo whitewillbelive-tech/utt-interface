@@ -15,7 +15,7 @@ STATIC = {'/': ('index.html','text/html'), '/app.mjs': ('app.mjs','text/javascri
 
 
 def make_server(port=8765, mode='synthetic', copies=1, *, provider=None, connect_env=False,
-                snapshot_env=False, source_provider=None):
+                snapshot_env=False, source_provider=None, publisher=None):
     if (mode not in ('synthetic', 'readonly') or (connect_env and snapshot_env)
             or ((connect_env or snapshot_env) and (mode != 'readonly' or provider is not None))):
         raise ValueError('Invalid server mode/configuration')
@@ -36,11 +36,19 @@ def make_server(port=8765, mode='synthetic', copies=1, *, provider=None, connect
     # Identify only this exact provider or its genuine bound read method. An
     # arbitrary adapter cannot opt into access to the workspace extension.
     from app.publisher_workspace_reader import WorkspaceSnapshotProvider
-    workspace_provider = provider if type(provider) is WorkspaceSnapshotProvider else None
+    from app.workspace_runtime import LocalWorkspaceRuntime
+    workspace_types = (WorkspaceSnapshotProvider, LocalWorkspaceRuntime)
+    workspace_provider = provider if type(provider) in workspace_types else None
     if type(provider) is ReadOnlyAdapter and type(provider.transport) is MethodType:
         method = provider.transport
-        if type(method.__self__) is WorkspaceSnapshotProvider and method.__func__ is WorkspaceSnapshotProvider.read:
+        owner_type = type(method.__self__)
+        if owner_type in workspace_types and method.__func__ is owner_type.read:
             workspace_provider = method.__self__
+    if publisher is not None:
+        from app.workspace_publisher import WorkspacePublisher
+        if (type(workspace_provider) is not LocalWorkspaceRuntime or type(publisher) is not WorkspacePublisher
+                or not publisher.owns(workspace_provider)):
+            raise ValueError('Invalid workspace publisher')
 
     class Handler(BaseHTTPRequestHandler):
         def allowed_origin(self):
@@ -78,20 +86,32 @@ def make_server(port=8765, mode='synthetic', copies=1, *, provider=None, connect
                 if workspace_provider is None:
                     return self.reply(404, {'error': 'NOT_SUPPORTED'})
                 return self.reply(200, workspace_provider.workspace_features())
+            if self.path == '/api/workspace/publish-status':
+                if publisher is None:
+                    return self.reply(404, {'error': 'NOT_SUPPORTED'})
+                return self.reply(200, publisher.status())
             if self.path not in STATIC:
                 return self.reply(404, {'error': 'NOT_FOUND'})
             name, mime = STATIC[self.path]
             self.reply(200, (WEB/name).read_bytes(), mime)
 
         def do_POST(self):
-            if self.path not in ('/api/read', '/api/source', '/api/workspace/read', '/api/workspace/lifecycle', '/api/workspace/catalog'):
+            if self.path not in ('/api/read', '/api/source', '/api/workspace/read', '/api/workspace/lifecycle',
+                                 '/api/workspace/catalog', '/api/workspace/write', '/api/workspace/publish',
+                                 '/api/workspace/refresh'):
                 return self.reply(405, {'error':'READ_ONLY'})
             if not self.allowed_origin():
                 return self.reply(403, {'error': 'ORIGIN_DENIED'})
+            if (self.path in ('/api/workspace/write', '/api/workspace/publish', '/api/workspace/refresh')
+                    and self.headers.get('Origin') != 'http://' + self.headers.get('Host', '')):
+                return self.reply(403, {'error': 'ORIGIN_DENIED'})
             def bad_request():
                 if self.path.startswith('/api/workspace/'):
-                    version = ('UTT-WORKSPACE-LIFECYCLE/0.1' if self.path == '/api/workspace/lifecycle'
-                               else 'UTT-WORKSPACE-DETAIL/0.1')
+                    version = {'/api/workspace/lifecycle': 'UTT-WORKSPACE-LIFECYCLE/0.1',
+                               '/api/workspace/write': 'UTT-WORKSPACE-WRITE/0.1',
+                               '/api/workspace/refresh': 'UTT-WORKSPACE-STATUS/0.1',
+                               '/api/workspace/publish': 'UTT-WORKSPACE-PUBLISH/0.1'}.get(
+                                   self.path, 'UTT-WORKSPACE-DETAIL/0.1')
                     return {'contract_version': version, 'status': 'ERROR',
                             'error': {'code': 'INVALID_REQUEST'}}
                 if self.path == '/api/source':
@@ -103,9 +123,50 @@ def make_server(port=8765, mode='synthetic', copies=1, *, provider=None, connect
                 if self.headers.get('Transfer-Encoding') or len(self.headers.get_all('Content-Length', [])) != 1:
                     raise ValueError()
                 n = int(self.headers.get('Content-Length', '0'))
-                if not 0 < n <= 16384 or self.headers.get('Content-Type','').split(';')[0] != 'application/json':
+                limit = 17 * 1024 * 1024 if self.path == '/api/workspace/write' else 16384
+                if not 0 < n <= limit or self.headers.get('Content-Type','').split(';')[0] != 'application/json':
                     return self.reply(400, bad_request())
                 payload = json.loads(self.rfile.read(n))
+                if self.path == '/api/workspace/refresh':
+                    if type(workspace_provider) is not LocalWorkspaceRuntime:
+                        return self.reply(404, {'error': 'NOT_SUPPORTED'})
+                    if payload != {'contract_version': 'UTT-WORKSPACE-STATUS/0.1'}:
+                        return self.reply(400, bad_request())
+                    return self.reply(200, workspace_provider.refresh())
+                if self.path == '/api/workspace/write':
+                    if type(workspace_provider) is not LocalWorkspaceRuntime:
+                        return self.reply(404, {'error': 'NOT_SUPPORTED'})
+                    if (type(payload) is not dict or payload.get('contract_version') != 'UTT-WORKSPACE-WRITE/0.1'
+                            or not isinstance(payload.get('dataset_id'), str) or not isinstance(payload.get('snapshot_id'), str)):
+                        return self.reply(400, bad_request())
+                    command = {k: v for k, v in payload.items() if k not in ('contract_version', 'dataset_id', 'snapshot_id')}
+                    if command.get('operation') == 'update':
+                        changes = command.get('changes')
+                        if type(changes) is not dict or not changes or set(changes) - {'title', 'body', 'summary'}:
+                            return self.reply(400, bad_request())
+                    if command.get('operation') == 'project_add':
+                        # Only this same-origin, explicit user action marks a new
+                        # project link user-confirmed. Do not trust a supplied actor
+                        # or approval/basis field from the request.
+                        if 'basis' in command:
+                            return self.reply(400, bad_request())
+                        command['basis'] = 'USER_CONFIRMED'
+                    if command.get('operation') == 'topic_add':
+                        if 'status' in command:
+                            return self.reply(400, bad_request())
+                        command['status'] = 'USER_CONFIRMED'
+                    def apply_write():
+                        return workspace_provider.write(command, dataset_id=payload['dataset_id'],
+                                                        snapshot_id=payload['snapshot_id'])
+                    return self.reply(200, publisher.write_if_idle(apply_write) if publisher is not None else apply_write())
+                if self.path == '/api/workspace/publish':
+                    if publisher is None:
+                        return self.reply(404, {'error': 'NOT_SUPPORTED'})
+                    if (type(payload) is not dict or set(payload) != {'contract_version', 'dataset_id', 'snapshot_id'}
+                            or payload.get('contract_version') != 'UTT-WORKSPACE-PUBLISH/0.1'
+                            or not isinstance(payload.get('dataset_id'), str) or not isinstance(payload.get('snapshot_id'), str)):
+                        return self.reply(400, bad_request())
+                    return self.reply(200, publisher.start(payload['dataset_id'], payload['snapshot_id']))
                 if self.path in ('/api/workspace/read', '/api/workspace/lifecycle', '/api/workspace/catalog'):
                     from app.publisher_workspace_reader import WorkspaceSnapshotError
                     if workspace_provider is None:

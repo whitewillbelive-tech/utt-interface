@@ -67,7 +67,13 @@
     "tests/test_workspace_http.py",
     "tests/test_workspace_verify_windows.py",
     "tests/test_workspace_write.py",
-    "source/tests/workspace_client.test.mjs"
+    "source/tests/workspace_client.test.mjs",
+    "tests/test_workspace_end_to_end.py",
+    "tests/test_workspace_publisher.py",
+    "tests/test_workspace_runtime.py",
+    "tests/test_workspace_windows.py",
+    "tests/test_workspace_write_http.py",
+    "source/tests/workspace_edit_browser.py"
   ],
   "development_prefixes": [
     "app/",

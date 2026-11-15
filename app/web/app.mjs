@@ -8,6 +8,8 @@ const client=new ReadClient(), listGate=new LatestRequest(), detailGate=new Late
 let page=0,cursors=[null],nextCursor=null,projects=[],mode=null,capabilities=null,features=null,workspaceFeature=null,providerSort='id_asc',listOriginId=null,listScrollY=0,currentDetailId=null,timer;
 const NS='utt.synthetic.session.v1';
 const sourceGates=new Set();
+const publishGate=new LatestRequest();let publishTimer=null,publishStatus=null;
+let writeInFlight=false,writeBlocked=false;
 function cancelSources(){for(const gate of sourceGates)gate.cancel();sourceGates.clear();}
 const supports=operation=>capabilities?.operations.includes(operation)===true;
 const filterState=name=>features?.filters[name]??'UNKNOWN';
@@ -69,8 +71,9 @@ function updateControls(){
 function hideDetail(){cancelSources();detailGate.cancel();currentDetailId=null;$('library-view').classList.remove('is-reading');$('detail').hidden=true;$('detail').replaceChildren();$('list-view').hidden=false;}
 function invalidate(){++navigationEpoch;listNeedsReset=true;pageResultValid=false;renderHome();clearTimeout(timer);listGate.cancel();$('results').setAttribute('aria-busy','false');hideDetail();nextCursor=null;$('results').replaceChildren();$('next').disabled=true;$('prev').disabled=true;}
 async function bootstrap(){
- invalidate();const token=bootGate.begin();client.dataset=null;capabilities=null;features=null;workspaceFeature=null;mode=null;projects=[];pageRecords=[];pageResultValid=false;visited=[];client.scenario='normal';renderHome();renderConversations();
+ invalidate();publishGate.cancel();clearTimeout(publishTimer);publishStatus=null;const token=bootGate.begin();client.dataset=null;capabilities=null;features=null;workspaceFeature=null;mode=null;projects=[];pageRecords=[];pageResultValid=false;visited=[];client.scenario='normal';renderHome();renderConversations();
  $('scenario').value='normal';$('synthetic-scenarios').hidden=true;$('dataset-kind').textContent='미연결';$('workspace-catalog').hidden=true;$('workspace-catalog-content').replaceChildren();
+ $('workspace-create').hidden=true;$('workspace-create-form').hidden=true;$('workspace-create-form').replaceChildren();$('workspace-sync').hidden=true;$('workspace-publish').disabled=true;$('workspace-refresh').hidden=true;$('connection-description').textContent='읽기 전용 · UTT ACCESS READ 초안';
  $('project').replaceChildren(new Option('전체 프로젝트 · 미분류 포함',''));
  $('projects').replaceChildren();$('components').replaceChildren();$('dataset').textContent='연결 확인 중…';
  $('mode').textContent='연결 확인 중 · 운영 승인 없음';$('connection-state').textContent='공급자: 확인 중 · 실제 정본: 미확인';
@@ -81,6 +84,7 @@ async function bootstrap(){
   const cap=await client.read('capabilities',{},token.signal);if(!token.current())return;
   if(mode==='synthetic'&&cap.snapshot.dataset_kind!=='SYNTHETIC')throw Object.assign(Error(),{code:'INVALID_RESPONSE'});
   client.dataset=cap.snapshot;capabilities=cap.result;
+  writeBlocked=false;
   const featureResponse=await client.readFeatures(token.signal);if(!token.current())return;
   features=featureResponse;
   if(!synthetic()&&cap.snapshot.dataset_kind==='WORKSPACE_SNAPSHOT'){
@@ -93,6 +97,12 @@ async function bootstrap(){
   if(!filterSupported('project'))$('project').value='';
   $('mode').textContent=synthetic()?'합성 개발 자료 · 운영 연결 없음':'읽기 공급자 응답 확인 · 운영 승인 없음';
   $('dataset-kind').textContent=synthetic()?'SYNTHETIC ONLY':'읽기 전용';
+  if(workspaceFeature?.writes_supported===true){
+   $('dataset-kind').textContent='로컬 작업 DB';$('connection-description').textContent='로컬 편집 가능 · Dropbox 반영 별도';
+   $('workspace-create').hidden=false;$('workspace-sync').hidden=false;
+   $('workspace-local-state').textContent='로컬 작업 DB 연결됨';$('workspace-dropbox-state').textContent='Dropbox 반영 상태 확인 중';
+   checkPublishStatus(cap.snapshot);
+  }
   $('connection-state').textContent='공급자: 읽기 응답 확인 · 실제 정본: 미확인';
   $('synthetic-scenarios').hidden=!synthetic();
   $('dataset').textContent=`${cap.snapshot.dataset_id} / ${cap.snapshot.dataset_kind} / 기준 ${cap.snapshot.snapshot_id}`;
@@ -270,13 +280,14 @@ async function showDetail(id){
     const extra=await client.workspaceDetail({dataset_id:d.snapshot.dataset_id,snapshot_id:d.snapshot.snapshot_id,record_id:id},token.signal);
     if(!token.current()||currentDetailId!==id)return;
     renderWorkspaceDetail(ws,extra);
+    if(workspaceFeature?.writes_supported===true)renderWorkspaceEditor(main,extra,token);
    }catch(error){
     if(!token.current()||currentDetailId!==id||error.name==='AbortError')return;
     ws.replaceChildren(el('h3','작업 DB의 연결과 이력'),el('p',`작업 DB 상세 조회 실패: ${errorText(error)}`,'error'));
    }
   }
   if(synthetic())main.append(proofDetails('합성 검토 연습 (이 탭에서만)',simulationUI(id)));
-  context.append(el('p','정본 승인·실제 저장·동기화는 명령 계약 미정으로 지원하지 않습니다.','warning'));
+  context.append(el('p',workspaceFeature?.writes_supported===true?'변경은 로컬에 저장됩니다. Dropbox 반영은 별도 동작입니다.':'정본 승인·실제 저장·동기화는 이 연결에서 지원하지 않습니다.','warning'));
   if(historyOk)completeNotice();
  }catch(error){if(token.current()&&error.name!=='AbortError'){box.replaceChildren(button('← 검색 결과로',back),el('p','상세를 읽지 못했습니다.'));failure(error);}}
 }
@@ -300,6 +311,212 @@ function renderWorkspaceDetail(target,data){
   target.append(section);
  }
 }
+function workspaceInput(parent,labelText,name,value,{multiline=false}={}){
+ const field=el('label',labelText),input=el(multiline?'textarea':'input');
+ input.name=name;input.value=value??'';if(multiline)input.rows=name==='body'?12:3;
+ field.append(input);parent.append(field);return input;
+}
+function newWorkspaceId(prefix){
+ if(typeof globalThis.crypto?.randomUUID!=='function')throw Object.assign(Error('안전한 식별자를 만들 수 없습니다.'),{code:'INVALID_REQUEST'});
+ return prefix+globalThis.crypto.randomUUID().replaceAll('-','').toLowerCase();
+}
+async function performWorkspaceWrite(scope,command,status,originToken=null){
+ if(writeInFlight||writeBlocked||workspaceFeature?.writes_supported!==true||publishStatus==='RUNNING'||
+    client.dataset?.dataset_id!==scope.dataset_id||client.dataset?.snapshot_id!==scope.snapshot_id){
+  status.textContent='현재 기준이 변경되었거나 다른 작업이 진행 중입니다. 자료를 다시 조회하세요.';status.className='error';return false;
+ }
+ writeInFlight=true;status.textContent='로컬 작업 DB에 저장 중…';status.className='';
+ try{
+  const result=await client.workspaceWrite(scope,command);
+  const reopen=command.operation==='create'||!!originToken?.current()&&currentDetailId===result.record_id;
+  await bootstrap();
+  if(client.dataset?.dataset_id===scope.dataset_id&&workspaceFeature?.writes_supported===true){
+   if(reopen)await showDetail(result.record_id);
+   $('workspace-local-state').textContent='로컬 저장 완료';
+   notify('로컬 저장 완료 · Dropbox 반영 전');
+  }else notify('로컬 저장은 완료됐지만 새 기준을 다시 열지 못했습니다.','warning');
+  return true;
+ }catch(error){
+  const uncertain=['COMMIT_UNKNOWN','WRITE_OUTCOME_UNKNOWN'].includes(error.code);
+  const savedRefresh=error.code==='LOCAL_SAVED_REFRESH_REQUIRED';
+  const conflict=['VERSION_CONFLICT','VERSION_MISMATCH','TARGET_VERSION_CONFLICT','DATA_REVISION_CONFLICT'].includes(error.code);
+  if(uncertain||conflict||savedRefresh){writeBlocked=true;$('workspace-refresh').hidden=false;$('workspace-local-state').textContent=savedRefresh?'로컬 저장 완료 · 재조회 필요':uncertain?'로컬 저장 결과 미확인':'로컬 버전 충돌';}
+  const message=savedRefresh?'로컬 저장은 완료됐습니다. 현재 저장 상태를 다시 확인하세요. 자동으로 다시 저장하지 않습니다.':uncertain?'저장 결과 미확인 · 다시 조회해 확인하세요. 자동으로 다시 저장하지 않습니다.':conflict?'다른 변경과 충돌했습니다. 저장되지 않았으며 기준을 다시 조회해야 합니다.':error.code==='PUBLISH_IN_PROGRESS'?'Dropbox 반영 중에는 저장할 수 없습니다. 반영이 끝난 뒤 다시 시도하세요.':'저장하지 못했습니다. 입력과 현재 상태를 확인하세요.';
+  status.textContent=message;status.className='error';status.dataset.code=error.code??'WRITE_FAILED';
+  if(uncertain||conflict||savedRefresh)for(const n of status.parentElement.querySelectorAll('button[type=submit]'))n.disabled=true;
+  return false;
+ }finally{writeInFlight=false;}
+}
+$('workspace-create').onclick=()=>{
+ if(workspaceFeature?.writes_supported!==true||!client.dataset)return;
+ const area=$('workspace-create-form');area.hidden=false;area.replaceChildren(el('h2','새 작업 자료'));
+ const scope={dataset_id:client.dataset.dataset_id,snapshot_id:client.dataset.snapshot_id},form=el('form');
+ const title=workspaceInput(form,'제목','title',''),body=workspaceInput(form,'본문','body','',{multiline:true}),summary=workspaceInput(form,'요약 (선택)','summary','',{multiline:true});
+ const status=el('p','','muted');status.setAttribute('role','status');const save=el('button','새 자료 로컬 저장','primary');save.type='submit';
+ form.append(save,button('취소',()=>{area.hidden=true;area.replaceChildren();},'quiet-button'),status);area.append(form);
+ form.onsubmit=async event=>{
+  event.preventDefault();if(!title.value.trim()){status.textContent='제목을 입력하세요.';status.className='error';return;}
+  let id;try{id=newWorkspaceId('usr-');}catch(error){status.textContent='안전한 자료 식별자를 만들 수 없습니다.';status.className='error';return;}
+  const record={title:title.value.trim(),body:body.value,summary:summary.value===''?null:summary.value,document_role:'USER_NOTE',
+   review_status:'PENDING_USER_REVIEW',adoption_status:'NEW_WORKSPACE_RECORD',source_kind:'USER_WORKSPACE'};
+  save.disabled=true;const ok=await performWorkspaceWrite(scope,{operation:'create',record_id:id,expected_version:null,record,reason:'사용자가 새 작업 자료 작성'},status);
+  if(!ok&&!['VERSION_CONFLICT','VERSION_MISMATCH','DATA_REVISION_CONFLICT','COMMIT_UNKNOWN','LOCAL_SAVED_REFRESH_REQUIRED','WRITE_OUTCOME_UNKNOWN'].includes(status.dataset.code))save.disabled=false;
+ };
+ title.focus();
+};
+function renderWorkspaceEditor(target,data,token){
+ const r=data.record,scope={dataset_id:data.dataset_id,snapshot_id:data.snapshot_id};
+ if(typeof r.title!=='string'||typeof r.body!=='string'||!(r.summary===null||typeof r.summary==='string'))return;
+ const section=el('section',undefined,'workspace-editor');section.append(el('h3','작업 자료 변경'));
+ const edit=el('details');edit.append(el('summary','내용 수정'));
+ const form=el('form');const title=workspaceInput(form,'제목','title',r.title),body=workspaceInput(form,'본문','body',r.body,{multiline:true}),summary=workspaceInput(form,'요약','summary',r.summary,{multiline:true});
+ const summaryNull=el('label','요약을 비워진 값(NULL)으로 저장 '),nullCheck=el('input');nullCheck.type='checkbox';summaryNull.append(nullCheck);form.append(summaryNull);
+ const status=el('p','','muted');status.setAttribute('role','status');const save=el('button','로컬에 저장','primary');save.type='submit';form.append(save,status);
+ form.onsubmit=async event=>{
+  event.preventDefault();const changes={};
+  if(title.value!==r.title)changes.title=title.value;
+  if(body.value!==r.body)changes.body=body.value;
+  const nextSummary=nullCheck.checked?null:(r.summary===null&&summary.value===''?null:summary.value);
+  if(nextSummary!==r.summary)changes.summary=nextSummary;
+  if(!Object.keys(changes).length){status.textContent='변경된 내용이 없습니다.';return;}
+  if(!title.value.trim()){status.textContent='제목을 입력하세요.';status.className='error';return;}
+  save.disabled=true;const ok=await performWorkspaceWrite(scope,{operation:'update',record_id:r.record_id,expected_version:r.version,changes,reason:'사용자가 작업 자료 수정'},status,token);
+  if(!ok&&!['VERSION_CONFLICT','VERSION_MISMATCH','DATA_REVISION_CONFLICT','COMMIT_UNKNOWN','LOCAL_SAVED_REFRESH_REQUIRED','WRITE_OUTCOME_UNKNOWN'].includes(status.dataset.code))save.disabled=false;
+ };
+ edit.append(form);section.append(edit);
+ const lifecycle=el('div'),lifeStatus=el('p','','muted');lifeStatus.setAttribute('role','status');
+ if(r.archived_at===null&&r.merged_into===null){
+  lifecycle.append(button('이 자료 보관',()=>performWorkspaceWrite(scope,{operation:'archive',record_id:r.record_id,expected_version:r.version,reason:'사용자가 작업 자료 보관'},lifeStatus,token),'quiet-button'));
+  const merge=el('details');merge.append(el('summary','다른 자료로 병합'));const mergeForm=el('form');
+  const targetId=workspaceInput(mergeForm,'대상 자료 ID','target','');const targetStatus=el('p','대상 자료를 먼저 확인하세요.','muted');let selected=null;
+  const check=button('대상 확인',async()=>{
+   selected=null;targetStatus.textContent='대상을 확인하는 중…';
+   try{const found=await client.workspaceDetail({dataset_id:scope.dataset_id,snapshot_id:scope.snapshot_id,record_id:targetId.value});
+    if(!token.current()||currentDetailId!==r.record_id)return;
+    if(found.record.record_id===r.record_id||found.record.archived_at!==null||found.record.merged_into!==null){targetStatus.textContent='현재 자료가 아니고 보관·병합되지 않은 대상을 선택하세요.';return;}
+    selected=found.record;targetStatus.textContent=`대상: ${selected.title} · 버전 ${selected.version}`;
+   }catch(error){if(token.current())targetStatus.textContent='대상을 확인하지 못했습니다.';}
+  },'quiet-button');
+  targetId.oninput=()=>{selected=null;targetStatus.textContent='대상 자료를 다시 확인하세요.';};
+  const mergeButton=el('button','확인한 대상으로 병합','primary');mergeButton.type='submit';mergeForm.append(check,targetStatus,mergeButton);
+  mergeForm.onsubmit=event=>{event.preventDefault();if(!selected||selected.record_id!==targetId.value){targetStatus.textContent='병합 대상을 먼저 확인하세요.';return;}performWorkspaceWrite(scope,{operation:'merge',record_id:r.record_id,expected_version:r.version,target_record_id:selected.record_id,target_expected_version:selected.version,reason:'사용자가 작업 자료 병합'},lifeStatus,token);};
+  merge.append(mergeForm);lifecycle.append(merge);
+ }else{
+  lifecycle.append(button('보관·병합 상태 복원',()=>performWorkspaceWrite(scope,{operation:'restore',record_id:r.record_id,expected_version:r.version,restore_archive:r.archived_at!==null,restore_merge:r.merged_into!==null,reason:'사용자가 작업 자료 복원'},lifeStatus,token),'quiet-button'));
+ }
+ lifecycle.append(lifeStatus);section.append(lifecycle);
+ const restoreVersions=el('details');restoreVersions.append(el('summary','과거 버전으로 복원'),el('p','제목·본문·요약·검토·채택·결정·보관·병합 상태를 해당 버전에서 가져와 새 버전으로 저장합니다.','muted'));
+ const restoreStatus=el('p','','muted');restoreStatus.setAttribute('role','status');
+ for(const rev of data.revisions){
+  if(!Number.isSafeInteger(rev.version)||rev.version<1||rev.version>=r.version)continue;
+  restoreVersions.append(button(`버전 ${rev.version} 상태 복원`,()=>{
+   if(!globalThis.confirm(`버전 ${rev.version}의 내용과 상태를 새 버전으로 복원할까요?`))return;
+   performWorkspaceWrite(scope,{operation:'restore_revision',record_id:r.record_id,expected_version:r.version,restore_version:rev.version,reason:'사용자가 이전 자료 버전 복원'},restoreStatus,token);
+  },'quiet-button'));
+ }
+ restoreVersions.append(restoreStatus);section.append(restoreVersions);
+ const projects=el('details');projects.append(el('summary','프로젝트 연결 변경'));const relations=el('div');projects.append(relations);
+ const relationStatus=el('p','','muted');relationStatus.setAttribute('role','status');
+ for(const item of data.projects){
+  const link=item.link;if(!link||typeof link.link_id!=='string')continue;
+  const row=el('p');row.append(document.createTextNode(`${item.project?.name??link.project_id} · ${link.role} · ${link.archived_at===null?'연결됨':'보관됨'} `));
+  const action=link.archived_at===null?'project_archive':'project_restore';
+  row.append(button(link.archived_at===null?'연결 보관':'연결 복원',()=>performWorkspaceWrite(scope,{operation:action,record_id:r.record_id,expected_version:r.version,link_id:link.link_id,reason:'사용자가 프로젝트 연결 상태 변경'},relationStatus,token),'text-link'));
+  relations.append(row);
+ }
+ const relationForm=el('form'),projectLabel=el('label','연결할 프로젝트'),select=el('select');projectLabel.append(select);relationForm.append(projectLabel);
+ const catalogStatus=el('p','프로젝트 목록을 확인하는 중…','muted');relationForm.append(catalogStatus);let catalogOffset=0,catalogLoading=false;
+ const more=button('프로젝트 더 보기',()=>loadProjects(),'quiet-button');more.disabled=true;relationForm.append(more);
+ async function loadProjects(){
+  if(catalogLoading||catalogOffset===null)return;catalogLoading=true;more.disabled=true;
+  try{
+   const page=await client.workspaceCatalog(scope,'projects',{offset:catalogOffset});
+   if(!token.current()||currentDetailId!==r.record_id)return;
+   for(const project of page.items)select.append(new Option(project.name,project.project_id));
+   catalogOffset=page.next_offset;catalogStatus.textContent=select.options.length?'직접 선택한 프로젝트와 연결합니다.':'이 작업 DB에 프로젝트가 없습니다.';more.disabled=catalogOffset===null;
+  }catch(error){if(token.current())catalogStatus.textContent='프로젝트 목록을 확인하지 못했습니다.';}
+  finally{catalogLoading=false;}
+ }
+ let requested=false;projects.addEventListener('toggle',()=>{if(projects.open&&!requested){requested=true;loadProjects();}});
+ const add=el('button','선택한 프로젝트 연결','primary');add.type='submit';relationForm.append(add,relationStatus);
+ relationForm.onsubmit=event=>{
+  event.preventDefault();if(!select.value){relationStatus.textContent='연결할 프로젝트를 선택하세요.';return;}
+  let link;try{link=newWorkspaceId('link-');}catch(error){relationStatus.textContent='안전한 연결 식별자를 만들 수 없습니다.';return;}
+  performWorkspaceWrite(scope,{operation:'project_add',record_id:r.record_id,expected_version:r.version,link_id:link,project_id:select.value,role:'RELATED',scope:null,reason:'사용자가 프로젝트에 자료 연결'},relationStatus,token);
+ };
+ projects.append(relationForm);section.append(projects);
+ const topics=el('details');topics.append(el('summary','주제 연결 변경'));const topicStatus=el('p','','muted');topicStatus.setAttribute('role','status');
+ for(const item of data.topics){
+  const link=item.link;if(!link||typeof link.topic_id!=='string')continue;
+  const row=el('p');row.append(document.createTextNode(`${item.topic?.name??link.topic_id} · ${link.status} `));
+  row.append(button('연결 제거',()=>performWorkspaceWrite(scope,{operation:'topic_remove',record_id:r.record_id,expected_version:r.version,topic_id:link.topic_id,reason:'사용자가 주제 연결 제거'},topicStatus,token),'text-link'));topics.append(row);
+ }
+ const topicForm=el('form'),topicLabel=el('label','연결할 주제'),topicSelect=el('select');topicLabel.append(topicSelect);topicForm.append(topicLabel);
+ const topicHint=el('p','주제 목록을 확인하는 중…','muted');topicForm.append(topicHint);let topicOffset=0,topicLoading=false;
+ const moreTopics=button('주제 더 보기',()=>loadTopics(),'quiet-button');moreTopics.disabled=true;topicForm.append(moreTopics);
+ async function loadTopics(){
+  if(topicLoading||topicOffset===null)return;topicLoading=true;moreTopics.disabled=true;
+  try{const page=await client.workspaceCatalog(scope,'topics',{offset:topicOffset});if(!token.current()||currentDetailId!==r.record_id)return;
+   for(const topic of page.items)topicSelect.append(new Option(topic.name,topic.topic_id));topicOffset=page.next_offset;topicHint.textContent=topicSelect.options.length?'직접 선택한 주제와 연결합니다.':'이 작업 DB에 주제가 없습니다.';moreTopics.disabled=topicOffset===null;
+  }catch(error){if(token.current())topicHint.textContent='주제 목록을 확인하지 못했습니다.';}finally{topicLoading=false;}
+ }
+ let topicsRequested=false;topics.addEventListener('toggle',()=>{if(topics.open&&!topicsRequested){topicsRequested=true;loadTopics();}});
+ const addTopic=el('button','선택한 주제 연결','primary');addTopic.type='submit';topicForm.append(addTopic,topicStatus);
+ topicForm.onsubmit=event=>{event.preventDefault();if(!topicSelect.value){topicStatus.textContent='연결할 주제를 선택하세요.';return;}
+  performWorkspaceWrite(scope,{operation:'topic_add',record_id:r.record_id,expected_version:r.version,topic_id:topicSelect.value,reason:'사용자가 주제에 자료 연결'},topicStatus,token);};
+ topics.append(topicForm);section.append(topics);
+ const tags=el('details');tags.append(el('summary','태그 변경'));const tagStatus=el('p','','muted');tagStatus.setAttribute('role','status');
+ for(const tag of data.tags){if(typeof tag.tag_id!=='string')continue;const row=el('p');row.append(document.createTextNode(`${tag.name??tag.tag_id} `));
+  row.append(button('태그 제거',()=>performWorkspaceWrite(scope,{operation:'tag_remove',record_id:r.record_id,expected_version:r.version,tag_id:tag.tag_id,reason:'사용자가 태그 제거'},tagStatus,token),'text-link'));tags.append(row);}
+ const tagForm=el('form'),tagName=workspaceInput(tagForm,'태그 이름','tag_name','');const addTag=el('button','태그 추가','primary');addTag.type='submit';tagForm.append(addTag,tagStatus);
+ tagForm.onsubmit=event=>{event.preventDefault();if(!tagName.value.trim()){tagStatus.textContent='태그 이름을 입력하세요.';return;}
+  let tagId;try{tagId=newWorkspaceId('tag-');}catch(error){tagStatus.textContent='안전한 태그 식별자를 만들 수 없습니다.';return;}
+  performWorkspaceWrite(scope,{operation:'tag_add',record_id:r.record_id,expected_version:r.version,tag_id:tagId,tag_name:tagName.value.trim(),reason:'사용자가 태그 추가'},tagStatus,token);};
+ tags.append(tagForm);section.append(tags);target.append(section);
+}
+function updatePublishStatus(value){
+ publishStatus=value?.status??'UNKNOWN';
+ const labels={READY:'Dropbox 반영 준비됨',RUNNING:'Dropbox 반영 중',PUBLISHED:'Dropbox 마지막 발행 확인됨',UNPUBLISHED:'로컬 변경 · Dropbox 반영 전',UNKNOWN:'Dropbox 반영 결과 미확인',ERROR:'Dropbox 반영 실패 · 다시 시도 가능'};
+ $('workspace-dropbox-state').textContent=labels[publishStatus]??labels.UNKNOWN;
+ $('workspace-publish').disabled=workspaceFeature?.writes_supported!==true||!['READY','UNPUBLISHED','ERROR'].includes(publishStatus);
+}
+async function checkPublishStatus(scope){
+ const token=publishGate.begin();clearTimeout(publishTimer);
+ try{
+  const status=await client.workspacePublishStatus(scope,token.signal);
+  if(!token.current()||client.dataset?.dataset_id!==scope.dataset_id||client.dataset?.snapshot_id!==scope.snapshot_id)return;
+  if(status===null){publishStatus=null;$('workspace-dropbox-state').textContent='Dropbox 반영 기능 미지원';$('workspace-publish').disabled=true;return;}
+  updatePublishStatus(status);
+  if(status.status==='RUNNING')publishTimer=setTimeout(()=>checkPublishStatus(scope),2000);
+ }catch(error){
+  if(token.current()&&error.name!=='AbortError'){$('workspace-dropbox-state').textContent='Dropbox 반영 상태 미확인';$('workspace-publish').disabled=true;publishStatus='UNKNOWN';}
+ }
+}
+async function publishWorkspace(){
+ if(writeInFlight||workspaceFeature?.writes_supported!==true||!client.dataset||!['READY','UNPUBLISHED','ERROR'].includes(publishStatus))return;
+ const scope={dataset_id:client.dataset.dataset_id,snapshot_id:client.dataset.snapshot_id};
+ publishGate.cancel();clearTimeout(publishTimer);publishStatus='RUNNING';$('workspace-publish').disabled=true;$('workspace-dropbox-state').textContent='Dropbox 반영 요청 중';
+ try{
+  const result=await client.workspacePublish(scope);
+  if(client.dataset?.dataset_id!==scope.dataset_id||client.dataset?.snapshot_id!==scope.snapshot_id)return;
+  updatePublishStatus(result);
+  if(result.status==='RUNNING')checkPublishStatus(scope);
+ }catch(error){
+  if(client.dataset?.dataset_id===scope.dataset_id&&client.dataset?.snapshot_id===scope.snapshot_id){
+   publishStatus='UNKNOWN';$('workspace-dropbox-state').textContent='Dropbox 반영 결과 미확인 · 현재 상태를 다시 확인하세요';$('workspace-publish').disabled=true;
+  }
+ }
+}
+$('workspace-publish').onclick=publishWorkspace;
+$('workspace-refresh').onclick=async()=>{
+ if(writeInFlight)return;
+ $('workspace-refresh').disabled=true;$('workspace-local-state').textContent='현재 저장 상태 확인 중';
+ try{
+  await client.workspaceRefresh();await bootstrap();
+  if(workspaceFeature?.writes_supported===true){$('workspace-local-state').textContent='현재 로컬 DB 다시 조회됨';notify('현재 저장 상태를 다시 읽었습니다. 필요한 내용을 직접 확인하세요.');}
+ }catch(error){$('workspace-local-state').textContent='현재 저장 상태 미확인 · 다시 확인하세요';$('workspace-refresh').hidden=false;}
+ finally{$('workspace-refresh').disabled=false;}
+};
 const workspaceFieldNames={
  link:'관계',project:'프로젝트',topic:'주제',link_id:'관계 ID',record_id:'자료 ID',project_id:'프로젝트 ID',topic_id:'주제 ID',
  role:'관계 역할',scope:'관계 범위',basis:'관계 근거',original_evidence_id:'원래 근거 ID',added_at:'추가 시각',archived_at:'보관 시각',

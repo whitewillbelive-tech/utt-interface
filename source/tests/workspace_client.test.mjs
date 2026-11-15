@@ -55,3 +55,28 @@ test('workspace project catalog and members are bound to exact snapshot and iden
  const stale=structuredClone(catalog);stale.snapshot_id='other';
  await assert.rejects(new ReadClient(async()=>response(stale)).workspaceCatalog(identity,'projects'),e=>e.code==='RESPONSE_SCOPE_MISMATCH');
 });
+
+test('workspace writes bind snapshot and version, reject actor injection, and preserve unknown outcomes',async()=>{
+ const id={dataset_id:'dataset',snapshot_id:'old-snapshot'};
+ const command={operation:'update',record_id:'record',expected_version:1,changes:{body:'fictional'},reason:'user edit'};
+ const success={contract_version:'UTT-WORKSPACE-WRITE/0.1',status:'OK',dataset_id:'dataset',snapshot_id:'new-snapshot',record_id:'record',version:2,local_status:'LOCAL_SAVED',dropbox_status:'UNPUBLISHED'};
+ let sent;const client=new ReadClient(async(path,opts)=>{assert.equal(path,'/api/workspace/write');sent=JSON.parse(opts.body);return response(success);});
+ assert.deepEqual(await client.workspaceWrite(id,command),success);
+ assert.deepEqual(sent,{contract_version:'UTT-WORKSPACE-WRITE/0.1',...id,...command});
+ await assert.rejects(client.workspaceWrite(id,{...command,actor:'USER'}),e=>e.code==='INVALID_REQUEST');
+ await assert.rejects(client.workspaceWrite(id,{...command,expected_version:null}),e=>e.code==='INVALID_REQUEST');
+ await assert.rejects(new ReadClient(async()=>{throw Error('fictional secret');}).workspaceWrite(id,command),e=>e.code==='WRITE_OUTCOME_UNKNOWN');
+ await assert.rejects(new ReadClient(async()=>response({contract_version:'UTT-WORKSPACE-WRITE/0.1',status:'ERROR',error:{code:'LOCAL_SAVED_REFRESH_REQUIRED'}})).workspaceWrite(id,command),e=>e.code==='LOCAL_SAVED_REFRESH_REQUIRED');
+});
+
+test('Dropbox status and explicit publish remain bound to the selected snapshot',async()=>{
+ const id={dataset_id:'dataset',snapshot_id:'snapshot'};
+ const running={contract_version:'UTT-WORKSPACE-PUBLISH/0.1',status:'RUNNING',...id};let calls=[];
+ const client=new ReadClient(async(path,opts)=>{calls.push({path,opts});return response(running);});
+ assert.deepEqual(await client.workspacePublishStatus(id),running);
+ assert.deepEqual(await client.workspacePublish(id),running);
+ assert.deepEqual(JSON.parse(calls[1].opts.body),{contract_version:'UTT-WORKSPACE-PUBLISH/0.1',...id});
+ const bad={...running,snapshot_id:'old'};
+ await assert.rejects(new ReadClient(async()=>response(bad)).workspacePublishStatus(id),e=>e.code==='RESPONSE_SCOPE_MISMATCH');
+ await assert.rejects(new ReadClient(async()=>response(bad)).workspacePublish(id),e=>e.code==='PUBLISH_OUTCOME_UNKNOWN');
+});
