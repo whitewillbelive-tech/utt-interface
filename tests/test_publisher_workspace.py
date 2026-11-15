@@ -143,6 +143,21 @@ class WorkspaceSnapshotTests(unittest.TestCase):
         finally:
             conn.close()
 
+    def test_legacy_workspace_table_must_not_be_treated_as_work_schema(self):
+        # The real historical UTT B dataset contains a legacy table named
+        # "workspace"; LIKE 'work_%' incorrectly treats '_' as a wildcard.
+        # Only literal work_ prefixed schema belongs to this check.
+        self.writer.execute('CREATE TABLE workspace(id TEXT PRIMARY KEY)')
+        self.writer.execute('CREATE TABLE workz_legacy(id TEXT PRIMARY KEY)')
+        self.writer.commit()
+        with snapshot_workspace(self.path, directory=self.root) as snapshot:
+            snapshot.assert_source_unchanged()
+            snapshot.assert_snapshot_unchanged()
+            with sqlite3.connect(snapshot.path) as conn:
+                self.assertEqual(conn.execute(
+                    "SELECT count(*) FROM sqlite_master WHERE name='workspace'"
+                ).fetchone()[0], 1)
+
     def test_unexpected_work_schema_object_is_rejected(self):
         self.writer.execute('CREATE TABLE work_fictional_extra(id TEXT)')
         self.writer.commit()
