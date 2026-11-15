@@ -330,6 +330,18 @@ class PublisherTransportTests(unittest.TestCase):
             self.transport.bind_permit(other)
         self.assertEqual(cm.exception.code, 'PLAN_REQUIRED')
 
+    def test_read_transport_exception_classifier_never_leaks_private_values(self):
+        import socket
+        import ssl
+        for exc, expected in (
+            (socket.gaierror('fictional-private-host'), 'DNS_FAILED'),
+            (ssl.SSLError('fictional-private-cert'), 'TLS_FAILED'),
+            (TimeoutError('fictional-private-timeout'), 'READ_TIMEOUT'),
+            (ConnectionError('fictional-private-disconnect'), 'NETWORK_FAILED'),
+            (RuntimeError('fictional-private-other'), 'REQUEST_FAILED'),
+        ):
+            self.assertEqual(p._read_failure_code(exc), expected)
+
     def test_exception_code_is_bounded_and_redacted(self):
         error = p.PublisherTransportError('fictional-secret')
         self.assertEqual(str(error), 'REQUEST_FAILED')
