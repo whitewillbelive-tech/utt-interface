@@ -484,3 +484,9 @@ Windows에서 Dropbox 접속 없이 로컬 workspace의 전수 목록·상세와
 운영 발행이 `READ_FAILED`로 보인 구버전은 활성 참조, manifest, COMMIT을 읽는 `publisher_reader._fetch` 단계에서 원래 전송 오류를 없앴다. 최신 코드에서는 `--preflight` 결과를 `ACTIVE_REQUEST_FAILED`, `MANIFEST_NETWORK_FAILED`, `COMMIT_RESPONSE_INVALID`, `ACTIVE_RECHECK_READ_FAILED` 등의 **고정·비민감 코드**로 구분한다. DNS/TLS/시간초과/기타 OS 네트워크 오류도 구분하지만 에러 문장·요청 URL·사용자 데이터는 출력하지 않는다. 이 단계들은 Dropbox 쓰기를 수행하지 않는다.
 
 기존 작업실 발행 결과가 `PUBLISH_FAILED`였더라도 원래 세부 원인을 역산할 수 없고, 새 진단에 다시 나타난 구체적인 단계·원인 코드가 근거가 된다. `Preflight status: ...`만 확인하고 발행 버튼은 반복 실행하지 않는다.
+
+### PR #16 Windows 실전 오류 수정 — `ACTIVE_REQUEST_INVALID`
+
+Windows 읽기 전용 발행 사전 검사는 `ACTIVE_REQUEST_INVALID`를 기록했다. `publisher_auth.PublisherAuthAttempt.exchange`는 Dropbox 액세스 토큰을 최대 8,192자 ASCII 출력 가능 문자열로 받아들이지만, `publisher_transport._request`는 파일 revision에 쓰는 `_REV` 정규식(최대 1,024자)을 *토큰에도* 적용했다. 따라서 길이 1,025~8,192의 정상 OAuth 토큰이 있다면 Dropbox HTTP 요청 전에 `REQUEST_INVALID`가 발생한다. `_TOKEN`(1~8192자)을 따로 두어 전송기와 인증기의 토큰 계약을 일치시켰고, revision의 1024자 상한 및 네트워크/경로 제한은 유지했다. 실제 OAuth 토큰의 원문이나 길이는 기록하지 않는다.
+
+회귀시험은 가상 HTTPS를 이용해 토큰 길이 1024·1025·2048·8192의 READ 성공과 길이 8193·제어문자 포함 토큰의 무네트워크 거부를 검증하도록 추가. 실제 Dropbox 발행 전에는 `python -m app.publisher_windows --preflight`의 `PREFLIGHT_OK`를 확인해야 한다.
