@@ -153,13 +153,15 @@ def _preflight_reader(snapshot):
         provider.close()
 
 
-def publish_snapshot(snapshot, transport, session):
+def publish_snapshot(snapshot, transport, session, *, preflight_only=False):
     """Verify, stage, re-read and activate once; never automatically retry a write.
 
     ``snapshot`` must remain within its context until return, with all local
     writers quiescent throughout. The transport must be authenticated and
     bound to the same user-confirmed App Folder as the caller's session.
     """
+    if type(preflight_only) is not bool:
+        return PublicationResult('NOT_VERIFIED', 'INVALID_REQUEST')
     activation_started = False
     try:
         snapshot.assert_source_unchanged()
@@ -209,6 +211,13 @@ def publish_snapshot(snapshot, transport, session):
         size, digest = snapshot.describe_snapshot()
         candidate = build_candidate(parent, parent_raw, workspace_size=size, workspace_sha256=digest)
         assert_parent_preserved(parent.manifest, parse_manifest(candidate.manifest_bytes))
+        # Read-only compatibility check: all parent, schema, source and reader
+        # checks above run, but NO upload, COMMIT or active-reference update.
+        # This branch is reached before a write permit can be minted.
+        if preflight_only:
+            snapshot.assert_source_unchanged()
+            snapshot.assert_snapshot_unchanged()
+            return PublicationResult('PREFLIGHT', 'PREFLIGHT_OK')
         specs = {candidate.root + e.path: (e.size, e.sha256) for e in candidate.entries}
         manifest_path = candidate.root + 'system/manifest.json'
         commit_path = candidate.root + 'system/COMMIT.json'
