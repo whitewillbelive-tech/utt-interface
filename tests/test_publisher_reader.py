@@ -60,6 +60,36 @@ class PublisherReaderTests(unittest.TestCase):
         self.assertEqual(error.exception.code, code)
         self.assertNotIn('fictional-', str(error.exception))
 
+    def test_control_fetch_diagnostics_are_stage_scoped_and_redacted(self):
+        from app.publisher_transport import PublisherTransportError
+        root = self.active['root']
+        for failing_path, expected in (
+            (ACTIVE, 'ACTIVE_REQUEST_FAILED'),
+            (root + 'system/manifest.json', 'MANIFEST_NETWORK_FAILED'),
+            (root + 'system/COMMIT.json', 'COMMIT_RESPONSE_INVALID'),
+        ):
+            with self.subTest(code=expected):
+                seen = []
+                def fetch(path):
+                    seen.append(path)
+                    if path == failing_path:
+                        code = expected.split('_', 1)[1]
+                        raise PublisherTransportError(code)
+                    return self.blobs.get(path)
+                self.assert_code(expected, lambda: resolve_active(fetch))
+                self.assertIn(failing_path, seen)
+
+    def test_active_recheck_failure_has_distinct_fixed_code(self):
+        calls = 0
+        def fetch(path):
+            nonlocal calls
+            if path == ACTIVE:
+                calls += 1
+                if calls == 2:
+                    raise OSError('fictional-secret')
+            return self.blobs.get(path)
+        self.assert_code('ACTIVE_RECHECK_READ_FAILED', lambda: resolve_active(fetch))
+
     def test_resolves_exact_controls_and_rereads_revision(self):
         calls = []
         def fetch(path):
