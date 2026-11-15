@@ -13,6 +13,7 @@ import http.client
 import io
 import json
 import re
+import socket
 import ssl
 from types import MappingProxyType
 from typing import Any, BinaryIO
@@ -33,7 +34,8 @@ _CODES = frozenset({'PATH_INVALID', 'REQUEST_INVALID', 'RESPONSE_INVALID', 'AUTH
                     'REQUEST_FAILED', 'SOURCE_CHANGED', 'STAGING_INCOMPLETE', 'LIMIT_EXCEEDED',
                     'SINK_FAILED', 'REMOTE_SIZE_MISMATCH', 'REMOTE_HASH_MISMATCH',
                     'PLAN_REQUIRED', 'PLAN_INVALID', 'ACTIVE_CHANGED', 'REMOTE_INCOMPLETE',
-                    'COMMITTED_GENERATION_DAMAGED', 'COMMITTED_GENERATION_IMMUTABLE'})
+                    'COMMITTED_GENERATION_DAMAGED', 'COMMITTED_GENERATION_IMMUTABLE',
+                    'DNS_FAILED', 'TLS_FAILED', 'READ_TIMEOUT', 'NETWORK_FAILED'})
 
 
 class PublisherTransportError(Exception):
@@ -237,6 +239,19 @@ def _is_missing(data: Any) -> bool:
             and e[tag].get('.tag') == 'not_found')
 
 
+def _read_failure_code(exc: BaseException) -> str:
+    """Classify only an exception class; no details, hostname, path or URL."""
+    if isinstance(exc, socket.gaierror):
+        return 'DNS_FAILED'
+    if isinstance(exc, ssl.SSLError):
+        return 'TLS_FAILED'
+    if isinstance(exc, TimeoutError):
+        return 'READ_TIMEOUT'
+    if isinstance(exc, (ConnectionError, OSError)):
+        return 'NETWORK_FAILED'
+    return 'REQUEST_FAILED'
+
+
 def _request(token: str, host: str, route: str, argument: dict, payload: bytes,
              *, streaming: bool = False):
     allowed = {
@@ -303,13 +318,13 @@ def _request(token: str, host: str, route: str, argument: dict, payload: bytes,
             except Exception:
                 pass
         raise
-    except Exception:
+    except Exception as exc:
         if conn is not None:
             try:
                 conn.close()
             except Exception:
                 pass
-        raise PublisherTransportError('WRITE_UNCERTAIN' if write else 'REQUEST_FAILED') from None
+        raise PublisherTransportError('WRITE_UNCERTAIN' if write else _read_failure_code(exc)) from None
 
 
 def _read_exact(stream: BinaryIO, count: int) -> bytes:
@@ -425,8 +440,8 @@ def _dispatch(token: str, operation: _Operation):
             return RemoteObject(total, meta.rev, sha.hexdigest(), meta.content_hash)
         except PublisherTransportError:
             raise
-        except Exception:
-            raise PublisherTransportError('REQUEST_FAILED') from None
+        except Exception as exc:
+            raise PublisherTransportError(_read_failure_code(exc)) from None
         finally:
             try:
                 conn.close()
