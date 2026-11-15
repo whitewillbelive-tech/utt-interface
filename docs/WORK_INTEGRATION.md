@@ -468,3 +468,13 @@ Windows에서 Dropbox 접속 없이 로컬 workspace의 전수 목록·상세와
 이번 변경의 합성 회귀 `20261115T093700Z-3c7ff416`은 15단계, Python 464개, Node 50개, 원형 38개와 Chromium workspace 및 기존 UI 검사를 통과했다. 독립 쓰기 엔진의 최종 보안 보강 시험 16개도 별도로 통과했다. 검증은 변경된 작업트리에서 수행했으며 실제 DB·Dropbox와는 구별한다.
 
 원본 writer 인계 후 최종 합성 검사 `20261115T095330Z-2157de4e`는 전체 16단계, Python 525개, Node 52개와 원형 38개·기존 Chromium·실제 로컬 runtime/가상 Dropbox Chromium을 통과했다. 이후 쓰기 HTTP의 승인 상태 임의 변경 차단과 명시적 재조회 검사를 별도로 통과했다. 합성 발행은 실제 자격증명·운영 DB·Dropbox 발행이 아니다.
+
+### 발행 실패 시 비변경 사전 확인 (PR #16 기능)
+
+발행 실패 후 `Dropbox 반영 실패` 상태가 표시되면 버튼을 반복 누르지 말고 먼저 현재 활성 참조를 별도로 조회한다. 기존 참조가 바뀌지 않은 경우, 변경 없이 읽기·형식 호환성 원인을 검사하는 명령:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.publisher_windows --preflight
+```
+
+이는 기존 발행기와 같은 데이터·부모·manifest·COMMIT·row 비교 및 candidate 구성 검사를 수행하되 **쓰기 허가 계획 생성 이전에 종료한다.** `PRECHECK`를 입력해야 시작하며 `START`와 혼동하지 않는다. Dropbox 인증은 기존 publisher의 3개 scope를 요구하지만 이 실행 모드에서 실제 파일 업로드·COMMIT 생성·활성 참조 교체는 수행하지 않는다. 결과는 `Preflight status: PREFLIGHT_OK` 또는 고정 오류 코드로만 출력된다. `PREFLIGHT_OK`는 발행 성공을 뜻하지 않으며 업로드 이후 구간 오류까지 진단하지 않는다. 발행이 불확실한 경우 현재 운영 참조 및 staged 상태를 먼저 확인하고 오염된 원격 세대를 지우거나 자동 재시도하지 않는다.
