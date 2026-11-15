@@ -107,7 +107,7 @@ def _readonly(path: Path, timeout: float) -> sqlite3.Connection:
 
 
 def _schema_catalog(conn: sqlite3.Connection) -> dict[tuple[str, str], tuple[str, ...]]:
-    rows = conn.execute("SELECT type,name,sql FROM sqlite_master WHERE name LIKE 'work_%' AND sql IS NOT NULL")
+    rows = conn.execute("SELECT type,name,sql FROM sqlite_master WHERE name GLOB 'work_*' AND sql IS NOT NULL")
     return {(kind, name): _sql_shape(sql) for kind, name, sql in rows if name not in _SHADOWS}
 
 
