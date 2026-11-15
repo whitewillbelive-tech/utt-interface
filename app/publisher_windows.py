@@ -24,7 +24,10 @@ def _secret(prompt):
         return getpass.getpass(prompt)
 
 
-def main():
+def main(*, preflight=False):
+    if type(preflight) is not bool:
+        print('Invalid publisher mode.')
+        return 2
     if sys.platform != 'win32':
         print('Publisher is available on Windows only.')
         return 2
@@ -50,19 +53,28 @@ def main():
         if not source or not directory:
             print('Publication stopped: INVALID_LOCAL_INPUT')
             return 2
-        print('The publisher will stage a new generation and may switch the active reference.')
-        print('The old fixed-generation A reader cannot open the new active generation.')
-        print('Use the verified workspace reader supplied with this code; it is read-only.')
-        if input('Type START to authorize and publish: ') != 'START':
-            print('Cancelled.')
-            return 2
+        if preflight:
+            print('READ-ONLY PREFLIGHT: no upload, no COMMIT, no active-reference update.')
+            print('Publisher OAuth scopes are requested, but this mode reads only.')
+            if input('Type PRECHECK to inspect the current parent without publication: ') != 'PRECHECK':
+                print('Cancelled.')
+                return 2
+        else:
+            print('The publisher will stage a new generation and may switch the active reference.')
+            print('The old fixed-generation A reader cannot open the new active generation.')
+            print('Use the verified workspace reader supplied with this code; it is read-only.')
+            if input('Type START to authorize and publish: ') != 'START':
+                print('Cancelled.')
+                return 2
         with snapshot_workspace(source, directory=directory) as snapshot:
             session = run_publisher_flow(app_key, configured, registered)
             transport = PublisherTransport(session, confirmed_app_key=confirmed_key,
                                            app_folder_confirmation='USER_CONFIRMED')
-            result = publish_snapshot(snapshot, transport, session)
-            print('Publication status:', result.code)
-            return 0 if result.code in ('PUBLISHED', 'ALREADY_ACTIVE') else 2
+            result = (publish_snapshot(snapshot, transport, session, preflight_only=True)
+                      if preflight else publish_snapshot(snapshot, transport, session))
+            print('Preflight status:' if preflight else 'Publication status:', result.code)
+            return 0 if result.code in (('PREFLIGHT_OK',) if preflight else
+                                        ('PUBLISHED', 'ALREADY_ACTIVE')) else 2
     except KeyboardInterrupt:
         print('\nPublication interrupted; follow the documented recovery procedure.')
         return 2
@@ -82,4 +94,8 @@ def main():
 
 
 if __name__ == '__main__':
-    raise SystemExit(main())
+    arguments = sys.argv[1:]
+    if arguments not in ([], ['--preflight']):
+        print('Supported options: --preflight')
+        raise SystemExit(2)
+    raise SystemExit(main(preflight=arguments == ['--preflight']))
