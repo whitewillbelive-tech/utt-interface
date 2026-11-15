@@ -476,9 +476,10 @@ function renderWorkspaceEditor(target,data,token){
 }
 function updatePublishStatus(value){
  publishStatus=value?.status??'UNKNOWN';
- const labels={READY:'Dropbox 반영 준비됨',RUNNING:'Dropbox 반영 중',PUBLISHED:'Dropbox 마지막 발행 확인됨',UNPUBLISHED:'로컬 변경 · Dropbox 반영 전',UNKNOWN:'Dropbox 반영 결과 미확인',ERROR:'Dropbox 반영 실패 · 다시 시도 가능'};
- $('workspace-dropbox-state').textContent=labels[publishStatus]??labels.UNKNOWN;
- $('workspace-publish').disabled=workspaceFeature?.writes_supported!==true||!['READY','UNPUBLISHED','ERROR'].includes(publishStatus);
+ const labels={READY:'Dropbox 반영 준비됨',RUNNING:'Dropbox 반영 중',PUBLISHED:'Dropbox 마지막 발행 확인됨',UNPUBLISHED:'로컬 변경 · Dropbox 반영 전',UNKNOWN:'Dropbox 반영 결과 미확인',ERROR:'Dropbox 반영 실패 · 오류 코드 확인 필요'};
+ const safeCode=typeof value?.error?.code==='string'&&/^[A-Z][A-Z0-9_]{1,95}$/.test(value.error.code)?value.error.code:'PUBLISH_FAILED';
+ $('workspace-dropbox-state').textContent=publishStatus==='ERROR'?`${labels.ERROR} (${safeCode})`:labels[publishStatus]??labels.UNKNOWN;
+ $('workspace-publish').disabled=workspaceFeature?.writes_supported!==true||!['READY','UNPUBLISHED'].includes(publishStatus);
 }
 async function checkPublishStatus(scope){
  const token=publishGate.begin();clearTimeout(publishTimer);
@@ -493,7 +494,7 @@ async function checkPublishStatus(scope){
  }
 }
 async function publishWorkspace(){
- if(writeInFlight||workspaceFeature?.writes_supported!==true||!client.dataset||!['READY','UNPUBLISHED','ERROR'].includes(publishStatus))return;
+ if(writeInFlight||workspaceFeature?.writes_supported!==true||!client.dataset||!['READY','UNPUBLISHED'].includes(publishStatus))return;
  const scope={dataset_id:client.dataset.dataset_id,snapshot_id:client.dataset.snapshot_id};
  publishGate.cancel();clearTimeout(publishTimer);publishStatus='RUNNING';$('workspace-publish').disabled=true;$('workspace-dropbox-state').textContent='Dropbox 반영 요청 중';
  try{
