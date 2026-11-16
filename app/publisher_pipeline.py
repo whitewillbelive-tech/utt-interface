@@ -42,38 +42,62 @@ _Stop = PublicationError
 
 
 def _read_object(transport, path, limit):
-    out = io.BytesIO()
-    result = transport.download(path, out, max_bytes=limit)
-    if result is None:
-        return None
-    data = out.getvalue()
-    if len(data) != result.size or hashlib.sha256(data).hexdigest() != result.sha256:
-        raise _Stop('REMOTE_PAYLOAD_MISMATCH')
-    return data, result.rev
+    # Two attempts at most for an interrupted READ only. The second download
+    # uses a fresh sink, so partial first-attempt bytes cannot be mixed in.
+    for attempt in range(2):
+        out = io.BytesIO()
+        try:
+            result = transport.download(path, out, max_bytes=limit)
+            if result is None:
+                return None
+            data = out.getvalue()
+            if len(data) != result.size or hashlib.sha256(data).hexdigest() != result.sha256:
+                raise _Stop('REMOTE_PAYLOAD_MISMATCH')
+            return data, result.rev
+        except PublisherTransportError as exc:
+            if exc.code != 'READ_TIMEOUT' or attempt:
+                raise
+
+
+def _read_metadata(transport, path):
+    # Metadata is read-only. Never retry add/upload/commit/active mutations.
+    for attempt in range(2):
+        try:
+            return transport.metadata(path)
+        except PublisherTransportError as exc:
+            if exc.code != 'READ_TIMEOUT' or attempt:
+                raise
 
 
 def _copy_verified(transport, path, size, digest, directory):
-    out = tempfile.SpooledTemporaryFile(max_size=1024 * 1024, dir=directory, mode='w+b')
-    try:
-        result = transport.download(path, out, max_bytes=size)
-        if result is None or result.size != size or result.sha256 != digest:
-            raise _Stop('REMOTE_PAYLOAD_MISMATCH')
-        out.seek(0)
-        h = hashlib.sha256()
-        count = 0
-        while True:
-            block = out.read(1024 * 1024)
-            if not block:
-                break
-            count += len(block)
-            h.update(block)
-        if count != size or h.hexdigest() != digest:
-            raise _Stop('REMOTE_PAYLOAD_MISMATCH')
-        out.seek(0)
-        return out
-    except BaseException:
-        out.close()
-        raise
+    # Discard incomplete bytes on a timed-out read. The caller still checks
+    # the same manifest-pinned size/hash on every successful response.
+    for attempt in range(2):
+        out = tempfile.SpooledTemporaryFile(max_size=1024 * 1024, dir=directory, mode='w+b')
+        try:
+            result = transport.download(path, out, max_bytes=size)
+            if result is None or result.size != size or result.sha256 != digest:
+                raise _Stop('REMOTE_PAYLOAD_MISMATCH')
+            out.seek(0)
+            h = hashlib.sha256()
+            count = 0
+            while True:
+                block = out.read(1024 * 1024)
+                if not block:
+                    break
+                count += len(block)
+                h.update(block)
+            if count != size or h.hexdigest() != digest:
+                raise _Stop('REMOTE_PAYLOAD_MISMATCH')
+            out.seek(0)
+            return out
+        except PublisherTransportError as exc:
+            out.close()
+            if exc.code != 'READ_TIMEOUT' or attempt:
+                raise
+        except BaseException:
+            out.close()
+            raise
 
 
 def _verify_activated_workspace(transport, fetch, current, candidate, size, digest, directory):
@@ -228,9 +252,9 @@ def publish_snapshot(snapshot, transport, session, *, preflight_only=False):
                                     previous_sha256=hashlib.sha256(parent.active_bytes).hexdigest())
         transport.bind_permit(permit)
         # A committed generation is immutable: if damaged, do not repair it.
-        committed = transport.metadata(commit_path) is not None
+        committed = _read_metadata(transport, commit_path) is not None
         def stage(path, stream, length, sha):
-            meta = transport.metadata(path)
+            meta = _read_metadata(transport, path)
             if meta is None:
                 if committed:
                     raise _Stop('COMMITTED_GENERATION_DAMAGED')
