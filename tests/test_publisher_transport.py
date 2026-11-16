@@ -164,15 +164,24 @@ class PublisherTransportTests(unittest.TestCase):
                 self.assertEqual(err.exception.code, 'REQUEST_INVALID')
 
     def test_read_socket_timeout_is_longer_than_uncertain_write_timeout(self):
-        body = b'fictional-active'
-        md = metadata(p.ACTIVE, len(body))
-        _, reader = self.call([Response(200, body, {
-            'Dropbox-API-Result': json.dumps(md)})],
-            lambda: self.transport.download(p.ACTIVE, io.BytesIO()))
+        # Exercise only the mocked HTTP boundary; do not simulate a real
+        # upload plan or start any network traffic.
+        reader = Connections([Response(200, b'fictional-active')])
+        with patch.object(p.http.client, 'HTTPSConnection', side_effect=reader.make):
+            connection, response = p._request(
+                'fictional-token', 'content.dropboxapi.com', '/2/files/download',
+                {'path': p.ACTIVE}, b'', streaming=True)
+            self.assertEqual(response.status, 200)
+            connection.close()
         self.assertEqual(reader.assertion[2], 60)
-        self.bind(b'')
-        _, writer = self.call([Response(200, payload(metadata(FILE, 0)))],
-            lambda: self.transport.upload_add(FILE, io.BytesIO(b''), 0))
+
+        writer = Connections([Response(200, payload({'session_id': 'fictional'}))])
+        with patch.object(p.http.client, 'HTTPSConnection', side_effect=writer.make):
+            connection, result = p._request(
+                'fictional-token', 'content.dropboxapi.com', '/2/files/upload_session/start',
+                {'close': False}, b'fictional')
+        self.assertIsNone(connection)
+        self.assertEqual(result['session_id'], 'fictional')
         self.assertEqual(writer.assertion[2], 30)
 
     def test_download_revision_is_from_same_response_as_bytes(self):
