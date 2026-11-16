@@ -490,3 +490,11 @@ Windows에서 Dropbox 접속 없이 로컬 workspace의 전수 목록·상세와
 Windows 읽기 전용 발행 사전 검사는 `ACTIVE_REQUEST_INVALID`를 기록했다. `publisher_auth.PublisherAuthAttempt.exchange`는 Dropbox 액세스 토큰을 최대 8,192자 ASCII 출력 가능 문자열로 받아들이지만, `publisher_transport._request`는 파일 revision에 쓰는 `_REV` 정규식(최대 1,024자)을 *토큰에도* 적용했다. 따라서 길이 1,025~8,192의 정상 OAuth 토큰이 있다면 Dropbox HTTP 요청 전에 `REQUEST_INVALID`가 발생한다. `_TOKEN`(1~8192자)을 따로 두어 전송기와 인증기의 토큰 계약을 일치시켰고, revision의 1024자 상한 및 네트워크/경로 제한은 유지했다. 실제 OAuth 토큰의 원문이나 길이는 기록하지 않는다.
 
 회귀시험은 가상 HTTPS를 이용해 토큰 길이 1024·1025·2048·8192의 READ 성공과 길이 8193·제어문자 포함 토큰의 무네트워크 거부를 검증하도록 추가. 실제 Dropbox 발행 전에는 `python -m app.publisher_windows --preflight`의 `PREFLIGHT_OK`를 확인해야 한다.
+
+### 운영 Windows `READ_TIMEOUT` 복구 정책
+
+실제 발행에서 읽기 타임아웃이 발생하여 기존 active는 A 723개 파일로 유지됐다. Dropbox App Folder에서 미완료 후보 세대 폴더가 발견되며 old manifest 순서 처음 65개 payload만 존재하고 COMMIT/manifest/workspace는 없다. 현재 발견한 세대를 운영 전환했다고 판단하거나 수동 삭제하지 않는다. 사용자 로컬 DB는 변경하지 않았다.
+
+`app.publisher_pipeline`은 `READ_TIMEOUT`에 한정하여 read-only ACTIVE/manifest/COMMIT `_read_object`, 기타 manifest-pinned `_copy_verified`, stage `metadata`를 최대 1회 추가 시도한다. 각 새 다운로드는 새 메모리/임시 버퍼를 사용하고 예전 부분 전송 바이트는 폐기한다. 완성한 응답은 동일한 크기·SHA 검증을 요구한다. **업로드 세션/COMMIT/활성 참조 갱신은 자동 재시도하지 않는다.** `_request`의 읽기 소켓 idle timeout은 60초, 쓰기 timeout은 기존 30초다.
+
+후속 실발행은 active가 기대 부모와 일치하고 유일 작성자가 확인되며 실제 사용자 DB와 스냅샷이 바뀌지 않은 경우에만 진행한다. 후보 세대 경로는 결정론적 manifest·snapshot에 결속되고 파일이 이미 있으면 메타데이터와 새 다운로드 해시를 확인하여 재사용한다. 이 작업이 남아 있는 656개 파일을 자동으로 완료했다고 주장하지 않는다. 중단된 세대는 사용자의 직접 확인 없이 지우지 않는다. 다운/업로드가 매우 많으므로 장시간 실행 가능성이 있고, 실제 성공 메시지와 원격 활성 참조/reader 검증을 별도로 요구한다.
