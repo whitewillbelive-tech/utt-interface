@@ -271,7 +271,8 @@ def _request(token: str, host: str, route: str, argument: dict, payload: bytes,
     write = route in ('/2/files/upload', '/2/files/upload_session/start',
                       '/2/files/upload_session/append_v2', '/2/files/upload_session/finish')
     try:
-        conn = http.client.HTTPSConnection(host, 443, timeout=30, context=ssl.create_default_context())
+        conn = http.client.HTTPSConnection(host, 443, timeout=60 if not write else 30,
+                                           context=ssl.create_default_context())
         conn.set_debuglevel(0)
         headers = {'Authorization': 'Bearer ' + token, 'Cache-Control': 'no-store'}
         if host == 'api.dropboxapi.com':
