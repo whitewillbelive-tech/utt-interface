@@ -138,6 +138,70 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual((result.status, result.code), ('NOT_VERIFIED', 'REMOTE_PAYLOAD_MISMATCH'))
         self.assertEqual(self.transport.writes, [])
 
+    def test_timed_out_active_control_read_uses_fresh_buffer_and_recovers(self):
+        from app.publisher_transport import PublisherTransportError
+        class OneTimeout(FakeTransport):
+            def __init__(self, objects):
+                super().__init__(objects)
+                self.failed = False
+            def download(self, path, sink, *, max_bytes):
+                if path == ACTIVE and not self.failed:
+                    self.failed = True
+                    sink.write(b'partial-old-control')
+                    raise PublisherTransportError('READ_TIMEOUT')
+                return super().download(path, sink, max_bytes=max_bytes)
+        self.transport = OneTimeout(initial_objects(self.writer))
+        result = self.run_pipeline()
+        self.assertEqual(result.code, 'PUBLISHED')
+        self.assertTrue(self.transport.failed)
+
+    def test_timed_out_parent_shard_read_resumes_without_partial_content(self):
+        from app.publisher_transport import PublisherTransportError
+        class OneTimeout(FakeTransport):
+            def __init__(self, objects):
+                super().__init__(objects)
+                self.failed = False
+            def download(self, path, sink, *, max_bytes):
+                if path.endswith('snapshots/tables.json') and not self.failed:
+                    self.failed = True
+                    sink.write(b'partial-shard')
+                    raise PublisherTransportError('READ_TIMEOUT')
+                return super().download(path, sink, max_bytes=max_bytes)
+        self.transport = OneTimeout(initial_objects(self.writer))
+        result = self.run_pipeline()
+        self.assertEqual(result.code, 'PUBLISHED')
+        self.assertTrue(self.transport.failed)
+
+    def test_timed_out_staging_metadata_read_recovers_without_duplicate_write(self):
+        from app.publisher_transport import PublisherTransportError
+        class OneTimeout(FakeTransport):
+            def __init__(self, objects):
+                super().__init__(objects)
+                self.failed = False
+            def metadata(self, path):
+                if path.endswith('system/COMMIT.json') and not self.failed:
+                    self.failed = True
+                    raise PublisherTransportError('READ_TIMEOUT')
+                return super().metadata(path)
+        self.transport = OneTimeout(initial_objects(self.writer))
+        result = self.run_pipeline()
+        self.assertEqual(result.code, 'PUBLISHED')
+        self.assertTrue(self.transport.failed)
+        self.assertEqual(sum(kind == 'cas' for kind, _ in self.transport.writes), 1)
+
+    def test_repeated_read_timeout_stops_without_any_remote_writes(self):
+        from app.publisher_transport import PublisherTransportError
+        class AlwaysTimeout(FakeTransport):
+            def download(self, path, sink, *, max_bytes):
+                if path == ACTIVE:
+                    sink.write(b'partial')
+                    raise PublisherTransportError('READ_TIMEOUT')
+                return super().download(path, sink, max_bytes=max_bytes)
+        self.transport = AlwaysTimeout(initial_objects(self.writer))
+        result = self.run_pipeline()
+        self.assertEqual((result.status, result.code), ('NOT_VERIFIED', 'ACTIVE_READ_TIMEOUT'))
+        self.assertEqual(self.transport.writes, [])
+
     def test_uncertain_cas_is_never_retried_or_logged(self):
         self.transport.fail_cas = True
         result = self.run_pipeline()
