@@ -163,6 +163,18 @@ class PublisherTransportTests(unittest.TestCase):
                             'download', p.ACTIVE, stream=io.BytesIO(), size=256))
                 self.assertEqual(err.exception.code, 'REQUEST_INVALID')
 
+    def test_read_socket_timeout_is_longer_than_uncertain_write_timeout(self):
+        body = b'fictional-active'
+        md = metadata(p.ACTIVE, len(body))
+        _, reader = self.call([Response(200, body, {
+            'Dropbox-API-Result': json.dumps(md)})],
+            lambda: self.transport.download(p.ACTIVE, io.BytesIO()))
+        self.assertEqual(reader.assertion[2], 60)
+        self.bind(b'')
+        _, writer = self.call([Response(200, payload(metadata(FILE, 0)))],
+            lambda: self.transport.upload_add(FILE, io.BytesIO(b''), 0))
+        self.assertEqual(writer.assertion[2], 30)
+
     def test_download_revision_is_from_same_response_as_bytes(self):
         body = b'fictional-active-content'
         md = metadata(p.ACTIVE, len(body), rev='same-response-rev')
