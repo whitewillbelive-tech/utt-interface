@@ -134,7 +134,7 @@ class ReadTransportTests(unittest.TestCase):
 
     def test_invalid_read_oauth_tokens_are_rejected_before_https(self):
         from app.publisher_read_transport import _dispatch, _ReadOperation
-        for token in ('', 'T' * 8193, 'bad\\nvalue', 'bad\\x00value'):
+        for token in ('', 'T' * 8193, 'bad\nvalue', 'bad\x00value'):
             with self.subTest(length=len(token)):
                 with patch('app.publisher_read_transport.http.client.HTTPSConnection',
                            side_effect=AssertionError('network called')):
