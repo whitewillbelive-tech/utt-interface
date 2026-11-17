@@ -15,6 +15,7 @@ import re
 from typing import Callable, Iterable
 
 from app.publisher_transport import PublisherTransportError
+from app.publisher_read_transport import PublisherReadTransportError
 from app.dropbox_auth import OAuthError
 
 ACTIVE = '/system/active-baseline.json'
@@ -152,6 +153,8 @@ _FETCH_OAUTH_CAUSES = frozenset({
     'AUTH_EXPIRED', 'AUTH_EXPIRED_AFTER_REQUEST', 'PUBLISH_AUTH_UNVERIFIED',
     'PUBLISH_TRANSPORT_UNAVAILABLE', 'PUBLISH_TRANSPORT_UNTRUSTED',
     'PUBLISH_REQUEST_UNCERTAIN', 'APP_FOLDER_UNCONFIRMED', 'APP_KEY_MISMATCH',
+    'READ_AUTH_UNVERIFIED', 'READ_TRANSPORT_UNAVAILABLE',
+    'READ_TRANSPORT_UNTRUSTED', 'READ_REQUEST_FAILED',
 })
 _FETCH_PHASES = {
     'ACTIVE_MISSING': 'ACTIVE',
@@ -165,7 +168,7 @@ def _fetch(fetch: Callable[[str], tuple[bytes, str] | None], path: str, code: st
     phase = _FETCH_PHASES[code]
     try:
         reply = fetch(path)
-    except PublisherTransportError as exc:
+    except (PublisherTransportError, PublisherReadTransportError) as exc:
         # Preserve only the fixed, non-sensitive transport category and the
         # known protocol step; never include remote body/path/exception text.
         raise ReaderError(phase + '_' + exc.code) from None
