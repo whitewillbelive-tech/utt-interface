@@ -65,6 +65,8 @@ def features_for(provider):
     """
     from app.provider import ReadOnlyAdapter, SyntheticProvider
     from app.snapshot_provider import SnapshotProvider
+    from app.publisher_workspace_reader import WorkspaceSnapshotProvider
+    from app.workspace_runtime import LocalWorkspaceRuntime
 
     implementation = provider
     if type(provider) is ReadOnlyAdapter:
@@ -72,7 +74,7 @@ def features_for(provider):
         implementation = None
         if type(transport) is MethodType:
             owner = transport.__self__
-            for known in (SyntheticProvider, SnapshotProvider):
+            for known in (SyntheticProvider, SnapshotProvider, WorkspaceSnapshotProvider, LocalWorkspaceRuntime):
                 if type(owner) is known and transport.__func__ is known.read:
                     implementation = owner
                     break
@@ -85,6 +87,9 @@ def features_for(provider):
                        document_role='SUPPORTED', review_status='SUPPORTED')
     elif type(implementation) is SnapshotProvider:
         support.update(query='SUPPORTED', project='CONDITIONAL',
+                       document_role='UNSUPPORTED', review_status='UNSUPPORTED')
+    elif type(implementation) in (WorkspaceSnapshotProvider, LocalWorkspaceRuntime):
+        support.update(query='SUPPORTED', project='UNSUPPORTED',
                        document_role='UNSUPPORTED', review_status='UNSUPPORTED')
     result = {'contract_version': VERSION, 'filters': support}
     validate_features(result)

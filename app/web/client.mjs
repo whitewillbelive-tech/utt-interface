@@ -45,6 +45,173 @@ export class ReadClient {
       return value;
     }catch(error){if(error.name==='AbortError')throw error;return null;}
   }
+  async workspaceFeatures(signal) {
+    let response;
+    try { response=await this.fetcher('/api/workspace/features',{signal}); }
+    catch(error) {
+      if(error.name==='AbortError')throw error;
+      throw Object.assign(Error('작업 DB 기능 확인에 실패했습니다.'),{code:'CONNECTION_UNAVAILABLE'});
+    }
+    if(response.status===404||response.status===405)return null;
+    if(!response.ok)throw Object.assign(Error('작업 DB 기능 확인에 실패했습니다.'),{code:'CONNECTION_UNAVAILABLE'});
+    let value;
+    try { value=await response.json(); }
+    catch(error) {if(error.name==='AbortError')throw error;throw Object.assign(Error('잘못된 작업 DB 기능 응답'),{code:'INVALID_RESPONSE'});}
+    if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).length!==3||
+       value.contract_version!=='UTT-WORKSPACE-FEATURES/0.1'||typeof value.read_detail!=='boolean'||
+       typeof value.writes_supported!=='boolean')throw Object.assign(Error('잘못된 작업 DB 기능 응답'),{code:'INVALID_RESPONSE'});
+    return value;
+  }
+  async workspaceDetail(identity,signal) {
+    const fields=['dataset_id','snapshot_id','record_id'];
+    if(!identity||!fields.every(key=>typeof identity[key]==='string'&&identity[key].length>0))
+      throw Object.assign(Error('작업 DB 자료 범위가 필요합니다.'),{code:'INVALID_REQUEST'});
+    const request=Object.freeze({contract_version:'UTT-WORKSPACE-READ/0.1',operation:'detail',
+      ...Object.fromEntries(fields.map(key=>[key,identity[key]]))});
+    const response=await this.fetchResponse('/api/workspace/read',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(request),signal},[400]);
+    let result;
+    try { result=await response.json(); }
+    catch(error) {if(error.name==='AbortError')throw error;throw Object.assign(Error('잘못된 작업 DB 응답'),{code:'INVALID_RESPONSE'});}
+    if(!result||typeof result!=='object'||Array.isArray(result)||result.contract_version!=='UTT-WORKSPACE-DETAIL/0.1')
+      throw Object.assign(Error('잘못된 작업 DB 상세 응답'),{code:'INVALID_RESPONSE'});
+    if(result.status==='ERROR')throw Object.assign(Error('작업 DB 상세를 읽지 못했습니다.'),{code:'CONNECTION_UNAVAILABLE'});
+    if(!fields.every(key=>result[key]===identity[key]))
+      throw Object.assign(Error('작업 DB 범위 불일치'),{code:'RESPONSE_SCOPE_MISMATCH'});
+    const lists=['projects','topics','sources','decisions','revisions','events','notes','tags','proposals','merged_children'];
+    if(!response.ok||result.status!=='OK'||!result.record||typeof result.record!=='object'||Array.isArray(result.record)||
+       result.record.record_id!==identity.record_id||!Number.isSafeInteger(result.record.version)||result.record.version<1||
+       ![null,'string'].includes(result.record.archived_at===null?null:typeof result.record.archived_at)||
+       ![null,'string'].includes(result.record.merged_into===null?null:typeof result.record.merged_into)||
+       !lists.every(key=>Array.isArray(result[key])&&result[key].every(row=>row&&typeof row==='object'&&!Array.isArray(row))))
+      throw Object.assign(Error('잘못된 작업 DB 상세 응답'),{code:'INVALID_RESPONSE'});
+    if(!['projects','topics'].every(key=>result[key].every(row=>row.link?.record_id===identity.record_id))||
+       !['sources','decisions','revisions','events','notes','proposals'].every(key=>result[key].every(row=>row.record_id===identity.record_id))||
+       !result.merged_children.every(row=>row.merged_into===identity.record_id))
+      throw Object.assign(Error('작업 DB 자료 범위 불일치'),{code:'RESPONSE_SCOPE_MISMATCH'});
+    return result;
+  }
+  async workspaceLifecycle(identity,signal) {
+    const ids=identity?.record_ids;
+    if(typeof identity?.dataset_id!=='string'||!identity.dataset_id||typeof identity?.snapshot_id!=='string'||!identity.snapshot_id||
+       !Array.isArray(ids)||ids.length>100||!ids.every(id=>typeof id==='string'&&id.length>0)||new Set(ids).size!==ids.length)
+      throw Object.assign(Error('잘못된 작업 DB 상태 요청'),{code:'INVALID_REQUEST'});
+    const request={contract_version:'UTT-WORKSPACE-LIFECYCLE/0.1',dataset_id:identity.dataset_id,snapshot_id:identity.snapshot_id,record_ids:ids};
+    const response=await this.fetchResponse('/api/workspace/lifecycle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request),signal},[400]);
+    let result;
+    try { result=await response.json(); }
+    catch(error) {if(error.name==='AbortError')throw error;throw Object.assign(Error('잘못된 상태 응답'),{code:'INVALID_RESPONSE'});}
+    if(!response.ok||!result||result.contract_version!==request.contract_version||
+       result.snapshot?.dataset_id!==identity.dataset_id||result.snapshot?.snapshot_id!==identity.snapshot_id||
+       !Array.isArray(result.records)||result.records.length!==ids.length)
+      throw Object.assign(Error('작업 DB 상태 범위 불일치'),{code:'RESPONSE_SCOPE_MISMATCH'});
+    const expected=new Set(ids),mapped=new Map();
+    for(const row of result.records){
+      if(!row||typeof row!=='object'||Array.isArray(row)||!expected.has(row.record_id)||mapped.has(row.record_id)||
+         ![null,'string'].includes(row.archived_at===null?null:typeof row.archived_at)||
+         ![null,'string'].includes(row.merged_into===null?null:typeof row.merged_into))
+        throw Object.assign(Error('잘못된 작업 DB 상태 응답'),{code:'INVALID_RESPONSE'});
+      mapped.set(row.record_id,row);
+    }
+    return mapped;
+  }
+  async workspaceCatalog(scope,operation,{identifier=null,limit=50,offset=0}={},signal) {
+    const members=operation==='project_members'||operation==='topic_members';
+    if(!['projects','topics','project_members','topic_members'].includes(operation)||
+       typeof scope?.dataset_id!=='string'||!scope.dataset_id||typeof scope?.snapshot_id!=='string'||!scope.snapshot_id||
+       !Number.isSafeInteger(limit)||limit<1||limit>1000||!Number.isSafeInteger(offset)||offset<0||offset>2147483647||
+       (members&&(typeof identifier!=='string'||!identifier)))
+      throw Object.assign(Error('잘못된 작업 DB 목록 요청'),{code:'INVALID_REQUEST'});
+    const request={contract_version:'UTT-WORKSPACE-READ/0.1',operation,dataset_id:scope.dataset_id,snapshot_id:scope.snapshot_id,limit,offset};
+    if(members)request.identifier=identifier;
+    const response=await this.fetchResponse('/api/workspace/catalog',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request),signal},[400]);
+    let result;
+    try{result=await response.json();}
+    catch(error){if(error.name==='AbortError')throw error;throw Object.assign(Error('잘못된 목록 응답'),{code:'INVALID_RESPONSE'});}
+    if(!response.ok||!result||result.contract_version!=='UTT-WORKSPACE-DETAIL/0.1'||result.status!=='OK'||
+       result.operation!==operation||result.kind!==({projects:'projects',topics:'topics',project_members:'project',topic_members:'topic'})[operation]||result.dataset_id!==scope.dataset_id||result.snapshot_id!==scope.snapshot_id||
+       !Array.isArray(result.items)||result.items.length>limit||
+       !(result.next_offset===null||(Number.isSafeInteger(result.next_offset)&&result.next_offset===offset+limit&&result.items.length===limit)))
+      throw Object.assign(Error('작업 DB 목록 범위 불일치'),{code:'RESPONSE_SCOPE_MISMATCH'});
+    const idKey=operation==='projects'||operation==='project_members'?'project_id':'topic_id';
+    for(const item of result.items){
+     if(!item||typeof item!=='object'||Array.isArray(item))throw Object.assign(Error('잘못된 목록 항목'),{code:'INVALID_RESPONSE'});
+     if(members){
+      if(!item.link||item.link[idKey]!==identifier||!item.record||item.record.record_id!==item.link.record_id||
+         typeof item.record.record_id!=='string'||!item.record.record_id||typeof item.record.title!=='string'||
+         ![null,'string'].includes(item.record.archived_at===null?null:typeof item.record.archived_at)||
+         ![null,'string'].includes(item.record.merged_into===null?null:typeof item.record.merged_into))
+        throw Object.assign(Error('목록 구성 범위 불일치'),{code:'RESPONSE_SCOPE_MISMATCH'});
+     }else if(typeof item[idKey]!=='string'||!item[idKey]||typeof item.name!=='string')
+       throw Object.assign(Error('잘못된 목록 항목'),{code:'INVALID_RESPONSE'});
+    }
+    return result;
+  }
+  async workspaceWrite(scope,command) {
+    if(typeof scope?.dataset_id!=='string'||!scope.dataset_id||typeof scope?.snapshot_id!=='string'||!scope.snapshot_id||
+       !command||typeof command!=='object'||Array.isArray(command)||typeof command.record_id!=='string'||!command.record_id||
+       !['create','update','archive','merge','restore','restore_revision','project_add','project_archive','project_restore','topic_add','topic_remove','tag_add','tag_remove'].includes(command.operation))
+      throw Object.assign(Error('잘못된 변경 요청'),{code:'INVALID_REQUEST'});
+    const extras={create:['record'],update:['changes'],archive:[],merge:['target_record_id','target_expected_version'],restore:['restore_archive','restore_merge'],
+      restore_revision:['restore_version'],project_add:['link_id','project_id','role','scope'],project_archive:['link_id'],project_restore:['link_id'],
+      topic_add:['topic_id'],topic_remove:['topic_id'],tag_add:['tag_id','tag_name'],tag_remove:['tag_id']};
+    const allowed=new Set(['operation','record_id','expected_version','reason',...extras[command.operation]]);
+    if(Object.keys(command).some(k=>!allowed.has(k))||typeof command.reason!=='string'||!command.reason.trim()||
+       (command.operation==='create'?command.expected_version!==null:!Number.isSafeInteger(command.expected_version)||command.expected_version<1)||
+       (command.operation==='merge'&&(!Number.isSafeInteger(command.target_expected_version)||command.target_expected_version<1||typeof command.target_record_id!=='string'||!command.target_record_id)))
+      throw Object.assign(Error('잘못된 변경 요청'),{code:'INVALID_REQUEST'});
+    const request={contract_version:'UTT-WORKSPACE-WRITE/0.1',dataset_id:scope.dataset_id,snapshot_id:scope.snapshot_id,...command};
+    let response,result;
+    try{
+      response=await this.fetcher('/api/workspace/write',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)});
+      result=await response.json();
+    }catch(error){throw Object.assign(Error('저장 결과를 확인할 수 없습니다.'),{code:'WRITE_OUTCOME_UNKNOWN'});}
+    if(!result||result.contract_version!=='UTT-WORKSPACE-WRITE/0.1'||!['OK','ERROR'].includes(result.status))
+      throw Object.assign(Error('저장 결과를 확인할 수 없습니다.'),{code:'WRITE_OUTCOME_UNKNOWN'});
+    if(!response.ok&&response.status>=500)throw Object.assign(Error('저장 결과를 확인할 수 없습니다.'),{code:'WRITE_OUTCOME_UNKNOWN'});
+    if(result.status==='ERROR'){
+      const codes=['VERSION_CONFLICT','VERSION_MISMATCH','TARGET_VERSION_CONFLICT','DATA_REVISION_CONFLICT','COMMIT_UNKNOWN','LOCAL_SAVED_REFRESH_REQUIRED','PUBLISH_IN_PROGRESS','INVALID_REQUEST','INVALID_STATE','RECORD_NOT_FOUND','INVALID_MERGE_TARGET','RECORD_EXISTS','ACCESS_DENIED','RELATION_EXISTS','PROJECT_NOT_FOUND'];
+      const code=codes.includes(result.error?.code)?result.error.code:'WRITE_FAILED';
+      throw Object.assign(Error('작업 DB 변경을 완료하지 못했습니다.'),{code});
+    }
+    if(!response.ok||result.dataset_id!==scope.dataset_id||typeof result.snapshot_id!=='string'||!result.snapshot_id||
+       result.record_id!==command.record_id||!Number.isSafeInteger(result.version)||result.version<1||
+       result.local_status!=='LOCAL_SAVED'||result.dropbox_status!=='UNPUBLISHED')
+      throw Object.assign(Error('저장 결과를 확인할 수 없습니다.'),{code:'WRITE_OUTCOME_UNKNOWN'});
+    return result;
+  }
+  async workspacePublishStatus(scope,signal) {
+    let response,result;
+    try{response=await this.fetcher('/api/workspace/publish-status',{signal});if(response.status===404||response.status===405)return null;result=await response.json();}
+    catch(error){if(error.name==='AbortError')throw error;throw Object.assign(Error('Dropbox 상태 확인에 실패했습니다.'),{code:'CONNECTION_UNAVAILABLE'});}
+    if(!response.ok||!result||result.contract_version!=='UTT-WORKSPACE-PUBLISH/0.1'||result.dataset_id!==scope?.dataset_id||
+       result.snapshot_id!==scope?.snapshot_id||!['READY','RUNNING','PUBLISHED','UNPUBLISHED','UNKNOWN','ERROR'].includes(result.status))
+      throw Object.assign(Error('Dropbox 상태 범위가 맞지 않습니다.'),{code:'RESPONSE_SCOPE_MISMATCH'});
+    return result;
+  }
+  async workspacePublish(scope) {
+    if(typeof scope?.dataset_id!=='string'||!scope.dataset_id||typeof scope?.snapshot_id!=='string'||!scope.snapshot_id)
+      throw Object.assign(Error('잘못된 Dropbox 반영 요청'),{code:'INVALID_REQUEST'});
+    let response,result;
+    try{
+      response=await this.fetcher('/api/workspace/publish',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({contract_version:'UTT-WORKSPACE-PUBLISH/0.1',dataset_id:scope.dataset_id,snapshot_id:scope.snapshot_id})});
+      result=await response.json();
+    }catch(error){throw Object.assign(Error('Dropbox 반영 결과를 확인할 수 없습니다.'),{code:'PUBLISH_OUTCOME_UNKNOWN'});}
+    if(!response.ok||!result||result.contract_version!=='UTT-WORKSPACE-PUBLISH/0.1'||result.dataset_id!==scope.dataset_id||
+       result.snapshot_id!==scope.snapshot_id||!['RUNNING','PUBLISHED','UNPUBLISHED','UNKNOWN','ERROR'].includes(result.status))
+      throw Object.assign(Error('Dropbox 반영 결과를 확인할 수 없습니다.'),{code:'PUBLISH_OUTCOME_UNKNOWN'});
+    return result;
+  }
+  async workspaceRefresh() {
+    let response,result;
+    try{response=await this.fetcher('/api/workspace/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contract_version:'UTT-WORKSPACE-STATUS/0.1'})});result=await response.json();}
+    catch(error){throw Object.assign(Error('현재 저장 상태를 확인할 수 없습니다.'),{code:'CONNECTION_UNAVAILABLE'});}
+    if(!response.ok||!result||result.contract_version!=='UTT-WORKSPACE-STATUS/0.1'||result.status!=='OK'||
+       typeof result.dataset_id!=='string'||!result.dataset_id||typeof result.snapshot_id!=='string'||!result.snapshot_id)
+      throw Object.assign(Error('현재 저장 상태를 확인할 수 없습니다.'),{code:'CONNECTION_UNAVAILABLE'});
+    return result;
+  }
   async read(operation, values={}, signal) {
     const request=Object.freeze(makeRequest(operation,{dataset_id:this.dataset?.dataset_id??null,snapshot_id:this.dataset?.snapshot_id??null,...values}));
     const response=await this.fetchResponse('/api/read',{method:'POST',headers:{'Content-Type':'application/json'},

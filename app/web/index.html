@@ -34,7 +34,17 @@
           <div id="components"></div>
         </details>
       </details>
+      <details class="sidebar-context" id="workspace-catalog" hidden>
+        <summary>작업 DB 프로젝트와 주제</summary>
+        <div id="workspace-catalog-content"></div>
+      </details>
       <div class="sidebar-bottom">
+        <section id="workspace-sync" hidden aria-label="작업 DB 저장과 Dropbox 반영">
+          <p id="workspace-local-state" role="status" aria-live="polite">로컬 저장 상태 확인 중</p>
+          <p id="workspace-dropbox-state" role="status" aria-live="polite">Dropbox 반영 상태 확인 중</p>
+          <button id="workspace-publish" class="quiet-button" type="button" disabled>Dropbox에 반영</button>
+          <button id="workspace-refresh" class="quiet-button" type="button" hidden>현재 저장 상태 다시 확인</button>
+        </section>
         <div class="connection-summary"><span class="status-dot" aria-hidden="true"></span><strong id="mode">연결 확인 중 · 운영 승인 없음</strong></div>
         <details id="connection-details" class="connection-details">
           <summary>자료 연결 정보</summary>
@@ -43,7 +53,7 @@
             <p id="dataset">연결 확인 중…</p>
             <p id="connection-state">공급자: 확인 중<br>실제 정본: 미확인</p>
           </div>
-          <p class="muted">읽기 전용 · UTT ACCESS READ 초안</p>
+          <p id="connection-description" class="muted">읽기 전용 · UTT ACCESS READ 초안</p>
           <details id="synthetic-scenarios" hidden>
             <summary>개발 시나리오</summary>
             <label>읽기 응답
@@ -99,6 +109,8 @@
 
       <section id="library-view" class="library-view" aria-labelledby="workspace-title" hidden>
         <div class="view-header"><div><p class="eyebrow">THE LIBRARY</p><h1 id="workspace-title" tabindex="-1">자료 찾기</h1><p>프로젝트의 맥락에서 찾고, 출처의 근거로 읽습니다.</p></div><span class="view-marker" aria-hidden="true">읽고, 연결하고.</span></div>
+        <button id="workspace-create" class="quiet-button" type="button" hidden>새 자료 만들기</button>
+        <section id="workspace-create-form" hidden aria-label="새 작업 자료"></section>
         <p class="browse-guidance muted">주제 분류는 연결 전입니다. 지원되는 검색어로 관련 자료를 찾아보세요. 자료 종류는 제공된 분류만 표시합니다.</p>
         <form id="filters">
           <div class="search-row"><label class="query">자료 검색<input id="search" type="search" placeholder="찾고 싶은 제목이나 내용을 입력하세요" autocomplete="off"></label><button type="submit" class="primary">검색</button></div>

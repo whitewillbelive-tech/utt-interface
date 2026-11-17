@@ -396,3 +396,115 @@ py -3 -m unittest discover -s tests -p test_active_baseline.py -v
 사용자 전용 보호환경 확인은 실제 실행을 시작하라는 지시가 아니다. 현재 격리는 BLOCKED이며 다음 확인도 모두 아직 NOT_RUN이다. 기존에 승인된 환경이 있다면 사용자가 그 PC에서 (1) 개발 프로세스와 사용자 실행 프로세스의 OS 주체·권한을 각각 확인하고, 같은 주체 또는 동일한 접근 권한이면 실패로 판정한다. (2) 실행 코드·설정·종속성, 토큰·자료·로그에 대해 개발자가 읽기·변경·디버그·핸들 복제나 관리자·백업 권한으로 우회할 수 없는지, 상속 권한까지 포함해 확인한다. (3) 실제 자료 대신 비민감 합성 canary로 필요한 읽기·쓰기·프로세스 접근 차단을 시험하고 같은 실행 코드의 무결성을 확인한다. SID·실제 경로·계정·canary 값·원본 로그는 공유하지 않고 비민감 PASS/FAIL/UNKNOWN만 기록한다. 서로 다른 주체나 canary 하나만으로 전체 격리를 증명하지 않으며 확인 불가·실패가 하나라도 있으면 BLOCKED를 유지한다. 계정 생성, 권한 변경, 자료 이동은 수행하지 않는다.
 
 이번 합성 전체 회귀 검사 `20261114T024940Z-d6e64262`: 14단계 PASS, Python 275개(새 가상 기준본 탐색 24개 포함), Node 46개, 기존 스키마 61건, 기존 Chromium UI 흐름 PASS, 원형 38개 보존 확인. 네트워크를 차단한 합성 탐색 및 가상 원천만 사용했다. 실제 Windows 보호환경·Dropbox 원천·운영 기준본 검사 결과가 아니다. 검증한 코드 tree와 PR tree를 대조한다.
+
+## 2026-11-15 — 운영 DB 발행 요청과 코드 확보 상태
+
+사용자가 기존 운영 DB의 수정·개편과 새 세대 발행을 명시적으로 지시했다. 이는 사용자 의사의 부족이나 재승인 대기가 아니다. 실제 DB는 사용자의 Windows PC에 남겨야 하며, 사용자가 첨부한 실제 통합 DB 패키지는 이 개발환경에서 다운로드하거나 열지 않았다. 현재 실제 Dropbox 변경과 실제 발행은 수행하지 않았다.
+
+요청된 기존 B-2 업로더는 현재 작업공간과 저장소 이력, 접근 가능한 Page의 연결 파일에서 찾지 못했다. 이 세션에는 일반 Library 파일명 검색이나 Page에 연결된 ZIP 바이트를 읽는 도구가 없어 Library에 파일이 없다고 단정하지 않는다. 인계된 A 정적 참조도 worker·승인 카탈로그·manifest/COMMIT·활성 참조의 원형 실행 계약을 포함하지 않는다. 과거 A에 고정된 업로더를 그대로 재실행하거나 파일명·건수로 새 세대와 승인 관계를 추정할 수 없다. 실제 활성 기준본·revision·승인 근거와 A 기존 기록/이력 및 B 작업 DB 사이의 ID·삭제·정정·미승인 상태 보존·충돌 규칙, 기존 리더의 입력 계약이 확인되기 전에는 발행 절차를 완성했다고 표시하지 않는다.
+
+`app/dropbox_content_hash.py`는 제공받은 스트림의 Dropbox 4 MiB block content hash만 계산한다. 이 해시는 일반 파일 SHA-256과 다르며 SQLite 일관성·A/B 관계·승인 의미 또는 snapshot 불변성을 증명하지 않는다. `app/dropbox_upload_session.py`는 외부 네트워크나 파일을 열지 않는 가상 start/append/finish 순서 검사용 부품이다. 기본 운영 진입은 `BLOCKED`이며 가상의 finish hash 일치는 별도 서버 재조회·전체 파일 재검증이나 COMMIT/활성 참조 발행이 아니다. 이 합성 코드는 호출자가 전달한 스트림을 읽을 수 있고 Python의 private/test guard는 데이터 격리 수단이 아니므로 실제 DB를 합성 검사에 넣지 않는다. 응답 불명 또는 중단 뒤 잔여 staging 가능성은 자동 재시도·삭제하지 않는다. 기존 읽기 OAuth 범위는 변경하지 않았으며 별도 쓰기 scope의 실제 세션이나 운영 발행 명령은 아직 제공하지 않는다.
+
+완성에 필요한 것은 기존 B-2 업로더의 비민감 source-only 코드와 승인/COMMIT/manifest/active-reference의 실제 계약, 새 DB의 비민감 스키마와 A→B 보존·충돌 정책이다. 실제 DB 본문·원장·계정·키·파일 경로·원본 로그는 개발환경으로 옮기지 않는다. 사용자 PC의 SQLite는 WAL을 포함한 일관된 snapshot과 편집 중단/최신성 경계를 확인해야 하며, DB 파일 본체만 복사하거나 `immutable=1`을 불변성 증거로 삼지 않는다. 별도 쓰기 token 권한 확인, 업로드 후 파일별 별도 재조회, COMMIT, `strict_conflict`를 포함한 revision 조건부 참조 갱신 및 모호한 결과의 안전한 재조정은 기존 형식 확인 후 구현·검증해야 한다. 실제 운영 발행 성공을 확인한 명령이나 결과는 현재 없다.
+
+독립 구성요소 합성 검사에서는 가상 151 MiB 스트림을 제한된 조각으로 처리했고 시작·완료 응답 유실, offset·크기·해시 불일치와 민감값 비출력을 시험했다. 전체 검사 `20261114T161627Z-34e6eba3`: 14단계 PASS, Python 294개(해시 7개·가상 세션 12개 포함), Node 46개, 기존 스키마 61건, Chromium UI 및 원형 38개 PASS. 이 결과는 실제 전송·재조회·복구·발행·Windows 수용의 증거가 아니며, 요구된 발행 도구의 완료 조건은 **미충족**이다.
+
+### PR #16 후속: Windows 사용자 실행 발행기와 workspace 읽기 연결
+
+기존 B-2 원문과 비민감 발행·보존 규칙의 인계 기준은 `dc086eba5fd1b69fd2c001969dba39aa10c9d772`다. 이후 PR #16의 코드 변경은 합성 검증 대상이며 실제 Dropbox 인증·읽기·쓰기와 실제 DB 검증은 **NOT_RUN**이다. 이 절의 명령은 사용자의 Windows에서 직접 실행하는 절차이지 개발환경에서 실자료를 열었다는 뜻이 아니다.
+
+- 발행기는 기존 읽기 전용 세션과 별도로 online PKCE의 `files.metadata.read`, `files.content.read`, `files.content.write`를 요청한다. 앱 비밀과 refresh token은 받거나 저장하지 않는다. 앱 키·DB 경로·임시 디렉터리는 로컬 숨김 입력이고 실행 결과에는 경로·ID·해시·토큰·원문을 출력하지 않는다.
+- 로컬 SQLite backup으로 WAL을 포함한 단일 스냅샷을 만들고 스키마·무결성·이력 및 읽기 제공자의 전체 목록·상세를 검사한다. 부모의 active/manifest/COMMIT과 파일들을 검증하고 기존 payload를 유지한 새 세대에 `UTT-WORKSPACE-OVERLAY/0.1`을 추가한다. 작업 DB가 현재 editable authority이며 기존 A payload를 새 DB라고 속이지 않는다. 이미 workspace가 있는 부모라면 이전 편집·이력도 비교한다. 기록의 승인 상태를 발행 때문에 바꾸지 않는다.
+- 고정 Dropbox HTTPS 경로에서 add-only 업로드 세션, 독립 재다운로드 및 해시 확인, 전체 재검증 뒤 COMMIT, 기존 active의 동일 응답 bytes/rev에 결속된 조건부 갱신과 재조회 순서로 진행한다. 결과가 불명인 쓰기를 자동 재시도하지 않는다. 부모 세대가 변경되거나 기존 COMMIT 아래 파일이 빠져 있으면 중지한다.
+- `app.publisher_workspace_server`는 별도의 읽기 전용 인증으로 active/manifest/COMMIT과 overlay 크기·해시 및 active 재확인 후 메모리 스냅샷을 기존 서버에 연결한다. 검색·목록·다음 페이지·상세와 별도 workspace API의 프로젝트·주제·출처 근거·결정·사건 이력을 제공한다. 원출처 본문과 쓰기 API는 제공하지 않는다. 이전 A 프로그램은 세대 해시와 건수를 고정하므로 수정 없이 새 active를 열 수 없다. 새 서버를 사용하는 전환이 필요하며 이전 A 프로그램 자체를 수정했다고 주장하지 않는다.
+- reader는 DB 최대 512 MiB와 Python `sqlite3.deserialize`를 요구한다. 보관·병합은 별도 workspace 상태·상세 계약에 보존하며 발행 전 전체 reader 검사를 통과해야 한다. 관리 검수에서 확인한 원생 REAL hex는 IEEE-754 binary64로 비교하고, 규칙이 확인되지 않은 BLOB이나 미지원 catalog 구조는 추측하지 않고 중지한다. 실제 현재 Dropbox 입력이 이 범위를 통과할지는 아직 확인되지 않았다. `D0Client.read()`의 차단은 유지한다.
+
+사용자 Windows 절차: 이 PR의 검토된 동일 코드와 Python 3.12를 사용하고 저장소 루트 PowerShell에서 다음을 실행한다. Dropbox 콘솔에서 기존 UnifiedThinkTank 앱이 App Folder인지, 이미 등록된 loopback redirect URI를 정확히 확인한다. 앱 설정·기존 연결은 변경하지 않는다.
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m app.publisher_windows
+```
+
+발행 명령은 `CONFIRM`, 등록된 것과 정확히 일치하는 redirect URI 두 번, 로컬 기존 앱 키 두 번, 로컬 workspace SQLite 경로와 사용자 전용 보호 임시 디렉터리를 숨김 입력으로 받은 뒤 `START`에서 브라우저 인증과 발행을 시작한다. App secret은 필요 없다. 시작 전에 다른 로컬 편집기를 닫고, 개발 도구와 다른 프로세스가 코드·자격증명·DB·임시 파일에 접근하거나 변경하지 못하는 사용자 전용 실행환경과 원격 세대의 단일 작성자 조건을 확보해야 한다. 이 코드는 ACL, 동일 OS 주체의 접근 분리 또는 원격 다중 파일의 원자적 불변성을 입증하지 않는다. active 참조 CAS는 마지막 검증과 CAS 사이에 다른 개별 payload가 바뀌는 경우까지 원자적으로 차단하지 못한다.
+
+`PUBLISHED`는 코드가 대상 COMMIT과 갱신된 active를 재조회했다는 로컬 실행 결과다. `ALREADY_ACTIVE`는 같은 활성 세대를 재검증한 결과다. 실제 사용자 실행에서 확인하기 전에는 둘 다 가정하지 않는다. 발행이 끝나면 같은 코드의 새 읽기 경로를 다음과 같이 별도로 실행하고 브라우저에서 표시된 loopback 주소를 연다.
+
+```powershell
+.\.venv\Scripts\python.exe -m app.publisher_workspace_server --port 8765
+```
+
+이 reader는 읽기 권한만 별도로 요청한다. 검색·목록·페이지·상세를 사용자 PC에서 직접 대조한다. 브라우저 callback 주소에 인증 코드가 잠시 보이거나 기록될 위험은 완전히 제거되지 않는다.
+
+중단·복구: 오류 코드를 로컬에서 확인하고 프로그램을 종료한다. `ACTIVE_CHANGED` 또는 부모/이력 충돌은 다른 발행·편집을 먼저 정리하고 데이터 차이를 보존한 뒤 새 계획으로 다시 시작한다. `COMMITTED_GENERATION_DAMAGED`, 해시 불일치, 지원하지 않는 직렬화·스키마 또는 reader 제한은 자동 복구·활성화를 하지 않는다. `ACTIVATION_UNKNOWN`, `ACTIVE_DB_UNVERIFIED` 또는 업로드 결과 불명에서는 실제 active가 바뀌었을 수 있다. 읽기 전용 서버로 현재 상태를 먼저 확인하고, 재실행하면 처음부터 현재 부모·파일·이력을 다시 검증한다. 활성 참조를 수동 덮어쓰거나 기존 세대를 삭제하지 않는다. 경로·기록·토큰·원본 로그를 외부로 보내지 않는다.
+
+합성 회귀 검증: 로컬 검사 `20261115T020834Z-8c7a5d93`는 원형 38개, Python 418개, Node 46개, 스키마 및 기존 Chromium과 신규 workspace Chromium을 포함한 15단계가 통과했다. 이 실행은 기준 `dc086e`의 변경된 작업트리에서 수행했다. 그 뒤 실제 `PublisherTransport`와 가짜 HTTPS를 통과하는 추가 종단 간 합성 시험도 별도로 통과했다. 이 결과는 실제 Windows·Dropbox·실DB 검증이 아니다.
+
+### PR #16 후속 REAL·workspace 조회와 쓰기 경계
+
+관리 검수 댓글 `#issuecomment-6888476047`은 과거 보존본 대조에서 native 69개 표의 `columns`/`rowid`/SQL과 86,868개 행 보존 및 REAL 1,518개의 hex→binary64 일치를 관측했다. 이는 현재 Dropbox 대조가 아니다. 비교기는 확인된 REAL을 binary64 바이트로 비교하고 정수와 구분하며 비유한 값과 미확인 BLOB은 거부한다. 합성 검증과 관리 관측, 실제 사용자 실행 결과를 혼동하지 않는다.
+
+기존 READ/0.1은 그대로 두고 `UTT-WORKSPACE-READ/0.1`, `UTT-WORKSPACE-DETAIL/0.1`, `UTT-WORKSPACE-LIFECYCLE/0.1` 별도 경계에서 동일 고정 snapshot의 보관·병합, 프로젝트·주제 목록과 소속, 출처 근거 다중 행, 결정·revision·event를 조회한다. 보관·병합 기록도 실제 상태와 함께 목록에 표시하고 발행 전 전수 검사한다. 원출처 본문이나 event의 진위·승인 의미를 새로 추정하지 않는다. 활성 참조 갱신 후에는 활성 workspace DB도 다시 내려받아 크기·SHA를 대조하고 활성 bytes/revision을 재확인한다.
+
+Windows에서 Dropbox 접속 없이 로컬 workspace의 전수 목록·상세와 프로젝트·주제·출처·이력 연결을 점검하는 명령은 다음과 같다. DB 경로와 보호 임시 디렉터리는 로컬 숨김 입력이며 출력은 고정 PASS/FAIL과 집계만이다. 이 점검은 외부 출처의 진위, 원본 사건 해시 체인, 승인 또는 실행환경 격리 증명이 아니다.
+
+```powershell
+.\.venv\Scripts\python.exe -m app.workspace_verify_windows
+```
+
+이후 관리 인계 `db8903b`에서 기존 `utt_workspace.py` source-only 발췌와 `WORK_EVENTS_HASH_CHAIN.md`를 수신했다. 그 원본의 특별 IMPORT seed, Python 정렬 JSON·이벤트 해시, 정수 `data_revision` 증가를 구현하고 원본 verifier와 합성 대조했다. 생성·수정·보관·병합·복원·이전 revision 복원과 프로젝트·주제·태그 관계 변경은 별도 workspace 쓰기 계약에서 트랜잭션과 snapshot/data revision·기록 version을 검사한다. 원래 없던 관계 삭제·상태 변경은 전후 행을 보존하는 별도 사건으로 기록한다. 사건 해시는 원래 `authorization_basis`를 포함하지 않으며 체인 일치가 역사적 승인 진위의 증명은 아니다.
+
+`LOCAL_SAVED`는 사용자가 선택한 Windows 로컬 DB에 저장했다는 뜻이고 Dropbox `PUBLISHED`는 별도의 실제 발행 후 활성 DB 재조회까지 확인한 시점의 상태다. 같은 작업실에서 발행하는 실행 명령은 아래와 같다. 입력 DB와 임시 디렉터리는 보호된 사용자 전용 환경에서 지정하고 다른 편집기는 중지한다. 프로그램 실행만으로 Dropbox 인증이나 발행은 시작하지 않으며 작업실에서 사용자가 직접 발행 동작을 선택한다.
+
+```powershell
+.\.venv\Scripts\python.exe -m app.workspace_windows
+```
+
+기본 작업실 포트 8765가 사용 중이면 `--port 8766`처럼 다른 로컬 포트를 지정한다. 앱 키와 기존 등록 redirect URI는 Windows 콘솔에서만 입력한다. Dropbox 표시의 발행 확인은 마지막 확인 시점의 결과이며 다른 프로그램이 이후 원격 기준을 바꾸지 않았다는 실시간 보증이 아니다.
+
+가상 HTTPS 발행과 재접속 시험은 실제 Windows·5,520건·Dropbox 발행 및 재접속 시험을 뜻하지 않는다. 이 실사용 단계는 아직 NOT_RUN이다. 원생 BLOB 표현의 일반 규격, 512 MiB 초과 workspace와 Windows에서 같은 DB의 재백업 바이트 안정성도 미확인이다. 재백업이 달라지거나 부모 이력이 일치하지 않으면 발행하지 않는다.
+
+이번 변경의 합성 회귀 `20261115T093700Z-3c7ff416`은 15단계, Python 464개, Node 50개, 원형 38개와 Chromium workspace 및 기존 UI 검사를 통과했다. 독립 쓰기 엔진의 최종 보안 보강 시험 16개도 별도로 통과했다. 검증은 변경된 작업트리에서 수행했으며 실제 DB·Dropbox와는 구별한다.
+
+원본 writer 인계 후 최종 합성 검사 `20261115T095330Z-2157de4e`는 전체 16단계, Python 525개, Node 52개와 원형 38개·기존 Chromium·실제 로컬 runtime/가상 Dropbox Chromium을 통과했다. 이후 쓰기 HTTP의 승인 상태 임의 변경 차단과 명시적 재조회 검사를 별도로 통과했다. 합성 발행은 실제 자격증명·운영 DB·Dropbox 발행이 아니다.
+
+### 발행 실패 시 비변경 사전 확인 (PR #16 기능)
+
+발행 실패 후 `Dropbox 반영 실패` 상태가 표시되면 버튼을 반복 누르지 말고 먼저 현재 활성 참조를 별도로 조회한다. 기존 참조가 바뀌지 않은 경우, 변경 없이 읽기·형식 호환성 원인을 검사하는 명령:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.publisher_windows --preflight
+```
+
+이는 기존 발행기와 같은 데이터·부모·manifest·COMMIT·row 비교 및 candidate 구성 검사를 수행하되 **쓰기 허가 계획 생성 이전에 종료한다.** `PRECHECK`를 입력해야 시작하며 `START`와 혼동하지 않는다. Dropbox 인증은 기존 publisher의 3개 scope를 요구하지만 이 실행 모드에서 실제 파일 업로드·COMMIT 생성·활성 참조 교체는 수행하지 않는다. 결과는 `Preflight status: PREFLIGHT_OK` 또는 고정 오류 코드로만 출력된다. `PREFLIGHT_OK`는 발행 성공을 뜻하지 않으며 업로드 이후 구간 오류까지 진단하지 않는다. 발행이 불확실한 경우 현재 운영 참조 및 staged 상태를 먼저 확인하고 오염된 원격 세대를 지우거나 자동 재시도하지 않는다.
+
+### PR #16 관리 보완 — 단계별 원격 읽기 실패 판별
+
+운영 발행이 `READ_FAILED`로 보인 구버전은 활성 참조, manifest, COMMIT을 읽는 `publisher_reader._fetch` 단계에서 원래 전송 오류를 없앴다. 최신 코드에서는 `--preflight` 결과를 `ACTIVE_REQUEST_FAILED`, `MANIFEST_NETWORK_FAILED`, `COMMIT_RESPONSE_INVALID`, `ACTIVE_RECHECK_READ_FAILED` 등의 **고정·비민감 코드**로 구분한다. DNS/TLS/시간초과/기타 OS 네트워크 오류도 구분하지만 에러 문장·요청 URL·사용자 데이터는 출력하지 않는다. 이 단계들은 Dropbox 쓰기를 수행하지 않는다.
+
+기존 작업실 발행 결과가 `PUBLISH_FAILED`였더라도 원래 세부 원인을 역산할 수 없고, 새 진단에 다시 나타난 구체적인 단계·원인 코드가 근거가 된다. `Preflight status: ...`만 확인하고 발행 버튼은 반복 실행하지 않는다.
+
+### PR #16 Windows 실전 오류 수정 — `ACTIVE_REQUEST_INVALID`
+
+Windows 읽기 전용 발행 사전 검사는 `ACTIVE_REQUEST_INVALID`를 기록했다. `publisher_auth.PublisherAuthAttempt.exchange`는 Dropbox 액세스 토큰을 최대 8,192자 ASCII 출력 가능 문자열로 받아들이지만, `publisher_transport._request`는 파일 revision에 쓰는 `_REV` 정규식(최대 1,024자)을 *토큰에도* 적용했다. 따라서 길이 1,025~8,192의 정상 OAuth 토큰이 있다면 Dropbox HTTP 요청 전에 `REQUEST_INVALID`가 발생한다. `_TOKEN`(1~8192자)을 따로 두어 전송기와 인증기의 토큰 계약을 일치시켰고, revision의 1024자 상한 및 네트워크/경로 제한은 유지했다. 실제 OAuth 토큰의 원문이나 길이는 기록하지 않는다.
+
+회귀시험은 가상 HTTPS를 이용해 토큰 길이 1024·1025·2048·8192의 READ 성공과 길이 8193·제어문자 포함 토큰의 무네트워크 거부를 검증하도록 추가. 실제 Dropbox 발행 전에는 `python -m app.publisher_windows --preflight`의 `PREFLIGHT_OK`를 확인해야 한다.
+
+### 운영 Windows `READ_TIMEOUT` 복구 정책
+
+실제 발행에서 읽기 타임아웃이 발생하여 기존 active는 A 723개 파일로 유지됐다. Dropbox App Folder에서 미완료 후보 세대 폴더가 발견되며 old manifest 순서 처음 65개 payload만 존재하고 COMMIT/manifest/workspace는 없다. 현재 발견한 세대를 운영 전환했다고 판단하거나 수동 삭제하지 않는다. 사용자 로컬 DB는 변경하지 않았다.
+
+`app.publisher_pipeline`은 `READ_TIMEOUT`에 한정하여 read-only ACTIVE/manifest/COMMIT `_read_object`, 기타 manifest-pinned `_copy_verified`, stage `metadata`를 최대 1회 추가 시도한다. 각 새 다운로드는 새 메모리/임시 버퍼를 사용하고 예전 부분 전송 바이트는 폐기한다. 완성한 응답은 동일한 크기·SHA 검증을 요구한다. **업로드 세션/COMMIT/활성 참조 갱신은 자동 재시도하지 않는다.** `_request`의 읽기 소켓 idle timeout은 60초, 쓰기 timeout은 기존 30초다.
+
+후속 실발행은 active가 기대 부모와 일치하고 유일 작성자가 확인되며 실제 사용자 DB와 스냅샷이 바뀌지 않은 경우에만 진행한다. 후보 세대 경로는 결정론적 manifest·snapshot에 결속되고 파일이 이미 있으면 메타데이터와 새 다운로드 해시를 확인하여 재사용한다. 이 작업이 남아 있는 656개 파일을 자동으로 완료했다고 주장하지 않는다. 중단된 세대는 사용자의 직접 확인 없이 지우지 않는다. 다운/업로드가 매우 많으므로 장시간 실행 가능성이 있고, 실제 성공 메시지와 원격 활성 참조/reader 검증을 별도로 요구한다.
+
+### 2026-11-17 Windows 활성 운영본 읽기 서버 수정 (ACTIVE_READ_FAILED)
+
+실제 Dropbox 운영 active가 신규 724개 파일 기준 세대로 전환되고 COMMIT=complete 및 새 332,759,040바이트 SQLite overlay가 있는 상태에서 Windows `publisher_workspace_server`는 `Reader did not start: ACTIVE_READ_FAILED`를 반환했다. 이는 발행 실패가 아닌 별도의 read-only 서버 오류다.
+
+원인 코드: 발행 전송기의 이전 오류와 동일하게 `publisher_read_transport._dispatch`가 리비전 전용 `_REV`(1~1024자)로 OAuth 토큰을 검사하지만, 실제 `dropbox_auth.AuthAttempt.exchange`는 1~8192자 토큰을 허용한다. `PublisherReadTransportError('INVALID_REQUEST')`가 `publisher_reader._fetch`의 포괄 처리로 `ACTIVE_READ_FAILED`로 가려졌다. 정상 승인 토큰 길이 구간이 불일치한 구조적 결함이다. 실제 토큰 값이나 길이는 열람/기록하지 않았다.
+
+수정: `_TOKEN` 전용 1~8192 인쇄 가능 ASCII 계약 적용, 기존 revision 1024자 검증 유지. `_fetch`에서 읽기 전용 공급자의 고정 오류 코드를 `ACTIVE_...` 등 단계별 코드로 보존. 읽기 전용 소켓 idle timeout 60초 및 시간초과일 때만 최대 1회 추가 다운로드(새 연결·버퍼 시작)를 허용, 오류문·키·토큰·경로 출력 금지. 새 SQLite overlay는 읽기 검증에서만 사용하고 새 발행·추가 파일·삭제 작업은 수행하지 않는다.
+
+수정 후에는 Windows에서 새 커밋을 받은 뒤 `python -m unittest tests.test_publisher_read_transport tests.test_publisher_reader`로 회귀 후 `python -m app.publisher_workspace_server --port 8765`를 실행. 정상 시작 시 검색/상세/관계 및 5,520 기록·45 프로젝트·109 주제 조회가 목표이나, 실제 사용자 수용 검사 전에는 정상 시작/완료를 주장하지 않는다.
