@@ -97,6 +97,21 @@ class PublisherReaderTests(unittest.TestCase):
             return self.blobs.get(path)
         self.assert_code('ACTIVE_RECHECK_READ_FAILED', lambda: resolve_active(fetch))
 
+    def test_readonly_transport_failure_keeps_stage_and_fixed_code(self):
+        from app.publisher_read_transport import PublisherReadTransportError
+        cases = [
+            ('/system/active-baseline.json', 'ACTIVE_INVALID_REQUEST'),
+            (self.active['root'] + 'system/manifest.json', 'MANIFEST_READ_TIMEOUT'),
+            (self.active['root'] + 'system/COMMIT.json', 'COMMIT_AUTH_REQUIRED'),
+        ]
+        for path, expected in cases:
+            with self.subTest(expected=expected):
+                def fetch(actual):
+                    if actual == path:
+                        raise PublisherReadTransportError(expected.split('_', 1)[1])
+                    return self.blobs.get(actual)
+                self.assert_code(expected, lambda: resolve_active(fetch))
+
     def test_resolves_exact_controls_and_rereads_revision(self):
         calls = []
         def fetch(path):
