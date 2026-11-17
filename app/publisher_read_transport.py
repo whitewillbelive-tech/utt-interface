@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 import http.client
 import json
 import re
+import socket
 import ssl
 
 ACTIVE = '/system/active-baseline.json'
@@ -19,8 +20,12 @@ MAX_WORKSPACE = 512 * 1024 * 1024
 _CONTROL_PATH = re.compile(r'/snapshots/baselines/[0-9a-f]{64}/system/(?:manifest|COMMIT)\.json\Z')
 _WORKSPACE_PATH = re.compile(r'/snapshots/baselines/[0-9a-f]{64}/workspace/snapshot-[0-9a-f]{64}\.sqlite\Z')
 _REV = re.compile(r'[\x21-\x7e]{1,1024}\Z')
+# Dropbox OAuth allows printable ASCII access tokens up to 8192 characters.
+# File revision limits are distinct; never validate a bearer with _REV.
+_TOKEN = re.compile(r'[\x21-\x7e]{1,8192}\Z')
 _CODES = frozenset({'INVALID_REQUEST', 'AUTH_REQUIRED', 'ACCESS_DENIED', 'READ_FAILED',
-                    'INVALID_RESPONSE', 'RESPONSE_TOO_LARGE', 'REMOTE_CHANGED'})
+                    'INVALID_RESPONSE', 'RESPONSE_TOO_LARGE', 'REMOTE_CHANGED',
+                    'DNS_FAILED', 'TLS_FAILED', 'READ_TIMEOUT', 'NETWORK_FAILED'})
 
 
 class PublisherReadTransportError(Exception):
@@ -67,9 +72,22 @@ def _missing(data):
             and error[kind].get('.tag') == 'not_found')
 
 
+def _read_error_code(exc: Exception) -> str:
+    """Fixed error code only; never retain a remote path or exception body."""
+    if isinstance(exc, socket.gaierror):
+        return 'DNS_FAILED'
+    if isinstance(exc, ssl.SSLError):
+        return 'TLS_FAILED'
+    if isinstance(exc, TimeoutError):
+        return 'READ_TIMEOUT'
+    if isinstance(exc, (ConnectionError, OSError)):
+        return 'NETWORK_FAILED'
+    return 'READ_FAILED'
+
+
 def _dispatch(token: str, operation: _ReadOperation):
     """Session-authorized download; result stays inside the local process."""
-    if type(operation) is not _ReadOperation or type(token) is not str or not _REV.fullmatch(token):
+    if type(operation) is not _ReadOperation or type(token) is not str or not _TOKEN.fullmatch(token):
         raise PublisherReadTransportError('INVALID_REQUEST')
     path, limit, expected = operation.path, operation.limit, operation.expected_size
     control = path == ACTIVE or type(path) is str and _CONTROL_PATH.fullmatch(path)
@@ -81,7 +99,7 @@ def _dispatch(token: str, operation: _ReadOperation):
         raise PublisherReadTransportError('INVALID_REQUEST')
     connection = None
     try:
-        connection = http.client.HTTPSConnection('content.dropboxapi.com', 443, timeout=30,
+        connection = http.client.HTTPSConnection('content.dropboxapi.com', 443, timeout=60,
                                                   context=ssl.create_default_context())
         connection.set_debuglevel(0)
         argument = json.dumps({'path': path}, ensure_ascii=True, separators=(',', ':'))
@@ -126,8 +144,8 @@ def _dispatch(token: str, operation: _ReadOperation):
         return bytes(content), meta['rev']
     except PublisherReadTransportError:
         raise
-    except Exception:
-        raise PublisherReadTransportError('READ_FAILED') from None
+    except Exception as exc:
+        raise PublisherReadTransportError(_read_error_code(exc)) from None
     finally:
         if connection is not None:
             try:
@@ -148,12 +166,21 @@ class PublisherReadTransport:
     def __repr__(self):
         return '<PublisherReadTransport redacted>'
 
+    def _read(self, operation):
+        # Bounded retry is safe for immutable reads. Each _dispatch call starts
+        # a new connection and a new in-memory buffer; partial data is discarded.
+        for attempt in range(2):
+            try:
+                return self.__session._publisher_read(
+                    _dispatch, operation,
+                    confirmed_app_key=self.__confirmed_app_key,
+                    app_folder_confirmation=self.__app_folder_confirmation)
+            except PublisherReadTransportError as exc:
+                if exc.code != 'READ_TIMEOUT' or attempt:
+                    raise
+
     def control(self, path):
-        return self.__session._publisher_read(_dispatch, _ReadOperation(path, MAX_CONTROL),
-                                              confirmed_app_key=self.__confirmed_app_key,
-                                              app_folder_confirmation=self.__app_folder_confirmation)
+        return self._read(_ReadOperation(path, MAX_CONTROL))
 
     def workspace(self, path, *, expected_size):
-        return self.__session._publisher_read(_dispatch, _ReadOperation(path, MAX_WORKSPACE, expected_size),
-                                              confirmed_app_key=self.__confirmed_app_key,
-                                              app_folder_confirmation=self.__app_folder_confirmation)
+        return self._read(_ReadOperation(path, MAX_WORKSPACE, expected_size))
