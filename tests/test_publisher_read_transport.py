@@ -118,6 +118,73 @@ class ReadTransportTests(unittest.TestCase):
         self.assertEqual(json.loads(req[4]['Dropbox-API-Arg']), {'path': self.path})
         self.assertNotIn('fictional-read-token', repr(self.transport))
 
+    def test_long_read_oauth_tokens_are_valid_without_changing_revision_limit(self):
+        from app.publisher_read_transport import _dispatch, _ReadOperation
+        body = b'fictional-control'
+        for token_length in (1024, 1025, 2048, 8192):
+            with self.subTest(token_length=token_length):
+                calls = []
+                response = FakeResponse(200, body, header=header(self.path, len(body)))
+                with patch('app.publisher_read_transport.http.client.HTTPSConnection',
+                           return_value=FakeConnection(response, calls)):
+                    result = _dispatch('T' * token_length,
+                                       _ReadOperation(self.path, 16 * 1024 * 1024))
+                self.assertEqual(result[0], body)
+                self.assertEqual(sum(call[0] == 'request' for call in calls), 1)
+
+    def test_invalid_read_oauth_tokens_are_rejected_before_https(self):
+        from app.publisher_read_transport import _dispatch, _ReadOperation
+        for token in ('', 'T' * 8193, 'bad\\nvalue', 'bad\\x00value'):
+            with self.subTest(length=len(token)):
+                with patch('app.publisher_read_transport.http.client.HTTPSConnection',
+                           side_effect=AssertionError('network called')):
+                    with self.assertRaises(PublisherReadTransportError) as exc:
+                        _dispatch(token, _ReadOperation(self.path, 16 * 1024 * 1024))
+                self.assertEqual(exc.exception.code, 'INVALID_REQUEST')
+
+    def test_one_read_timeout_retries_with_new_connection_and_discards_partial_bytes(self):
+        class TimeoutResponse(FakeResponse):
+            def read(self, size=-1):
+                raise TimeoutError('fictional timeout private content')
+        calls = []
+        answers = [
+            FakeConnection(TimeoutResponse(200, header=header(self.path, 8)), calls),
+            FakeConnection(FakeResponse(200, b'complete',
+                                        header=header(self.path, 8)), calls),
+        ]
+        with patch('app.publisher_read_transport.http.client.HTTPSConnection',
+                   side_effect=answers):
+            result = self.transport.control(self.path)
+        self.assertEqual(result, (b'complete', 'fictional-revision'))
+        self.assertEqual(sum(call[0] == 'request' for call in calls), 2)
+
+    def test_repeated_read_timeouts_stop_bounded_without_leaking_details(self):
+        class TimeoutResponse(FakeResponse):
+            def read(self, size=-1):
+                raise TimeoutError('fictional private content')
+        calls = []
+        def factory(*_args, **_kwargs):
+            return FakeConnection(TimeoutResponse(200, header=header(self.path, 8)), calls)
+        with patch('app.publisher_read_transport.http.client.HTTPSConnection',
+                   side_effect=factory):
+            with self.assertRaises(PublisherReadTransportError) as exc:
+                self.transport.control(self.path)
+        self.assertEqual(exc.exception.code, 'READ_TIMEOUT')
+        self.assertEqual(sum(call[0] == 'request' for call in calls), 2)
+        self.assertNotIn('fictional private content', str(exc.exception))
+
+    def test_read_socket_timeout_is_sixty_seconds(self):
+        body = b'fictional-control'
+        observed = []
+        def factory(host, port, *, timeout, context):
+            observed.append(timeout)
+            return FakeConnection(FakeResponse(
+                200, body, header=header(self.path, len(body))), [])
+        with patch('app.publisher_read_transport.http.client.HTTPSConnection',
+                   side_effect=factory):
+            self.assertEqual(self.transport.control(self.path)[0], body)
+        self.assertEqual(observed, [60])
+
     def test_no_arbitrary_paths_or_fake_authorization(self):
         with patch('app.publisher_read_transport.http.client.HTTPSConnection', side_effect=AssertionError('network')):
             with self.assertRaises(PublisherReadTransportError) as exc:
