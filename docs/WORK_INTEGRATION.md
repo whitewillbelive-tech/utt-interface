@@ -498,3 +498,13 @@ Windows 읽기 전용 발행 사전 검사는 `ACTIVE_REQUEST_INVALID`를 기록
 `app.publisher_pipeline`은 `READ_TIMEOUT`에 한정하여 read-only ACTIVE/manifest/COMMIT `_read_object`, 기타 manifest-pinned `_copy_verified`, stage `metadata`를 최대 1회 추가 시도한다. 각 새 다운로드는 새 메모리/임시 버퍼를 사용하고 예전 부분 전송 바이트는 폐기한다. 완성한 응답은 동일한 크기·SHA 검증을 요구한다. **업로드 세션/COMMIT/활성 참조 갱신은 자동 재시도하지 않는다.** `_request`의 읽기 소켓 idle timeout은 60초, 쓰기 timeout은 기존 30초다.
 
 후속 실발행은 active가 기대 부모와 일치하고 유일 작성자가 확인되며 실제 사용자 DB와 스냅샷이 바뀌지 않은 경우에만 진행한다. 후보 세대 경로는 결정론적 manifest·snapshot에 결속되고 파일이 이미 있으면 메타데이터와 새 다운로드 해시를 확인하여 재사용한다. 이 작업이 남아 있는 656개 파일을 자동으로 완료했다고 주장하지 않는다. 중단된 세대는 사용자의 직접 확인 없이 지우지 않는다. 다운/업로드가 매우 많으므로 장시간 실행 가능성이 있고, 실제 성공 메시지와 원격 활성 참조/reader 검증을 별도로 요구한다.
+
+### 2026-11-17 Windows 활성 운영본 읽기 서버 수정 (ACTIVE_READ_FAILED)
+
+실제 Dropbox 운영 active가 신규 724개 파일 기준 세대로 전환되고 COMMIT=complete 및 새 332,759,040바이트 SQLite overlay가 있는 상태에서 Windows `publisher_workspace_server`는 `Reader did not start: ACTIVE_READ_FAILED`를 반환했다. 이는 발행 실패가 아닌 별도의 read-only 서버 오류다.
+
+원인 코드: 발행 전송기의 이전 오류와 동일하게 `publisher_read_transport._dispatch`가 리비전 전용 `_REV`(1~1024자)로 OAuth 토큰을 검사하지만, 실제 `dropbox_auth.AuthAttempt.exchange`는 1~8192자 토큰을 허용한다. `PublisherReadTransportError('INVALID_REQUEST')`가 `publisher_reader._fetch`의 포괄 처리로 `ACTIVE_READ_FAILED`로 가려졌다. 정상 승인 토큰 길이 구간이 불일치한 구조적 결함이다. 실제 토큰 값이나 길이는 열람/기록하지 않았다.
+
+수정: `_TOKEN` 전용 1~8192 인쇄 가능 ASCII 계약 적용, 기존 revision 1024자 검증 유지. `_fetch`에서 읽기 전용 공급자의 고정 오류 코드를 `ACTIVE_...` 등 단계별 코드로 보존. 읽기 전용 소켓 idle timeout 60초 및 시간초과일 때만 최대 1회 추가 다운로드(새 연결·버퍼 시작)를 허용, 오류문·키·토큰·경로 출력 금지. 새 SQLite overlay는 읽기 검증에서만 사용하고 새 발행·추가 파일·삭제 작업은 수행하지 않는다.
+
+수정 후에는 Windows에서 새 커밋을 받은 뒤 `python -m unittest tests.test_publisher_read_transport tests.test_publisher_reader`로 회귀 후 `python -m app.publisher_workspace_server --port 8765`를 실행. 정상 시작 시 검색/상세/관계 및 5,520 기록·45 프로젝트·109 주제 조회가 목표이나, 실제 사용자 수용 검사 전에는 정상 시작/완료를 주장하지 않는다.
